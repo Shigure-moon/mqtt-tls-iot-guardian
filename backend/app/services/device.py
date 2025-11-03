@@ -1,7 +1,6 @@
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
-from sqlalchemy.orm import joinedload
 from app.models.device import Device, DeviceCertificate, DeviceLog
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceCertificateCreate, DeviceLogCreate
 from datetime import datetime
@@ -14,7 +13,6 @@ class DeviceService:
         """通过ID获取设备"""
         result = await self.db.execute(
             select(Device)
-            .options(joinedload(Device.certificates))
             .filter(Device.id == device_id)
         )
         return result.scalar_one_or_none()
@@ -23,7 +21,6 @@ class DeviceService:
         """通过设备ID获取设备"""
         result = await self.db.execute(
             select(Device)
-            .options(joinedload(Device.certificates))
             .filter(Device.device_id == device_id)
         )
         return result.scalar_one_or_none()
@@ -32,7 +29,6 @@ class DeviceService:
         """获取多个设备"""
         result = await self.db.execute(
             select(Device)
-            .options(joinedload(Device.certificates))
             .offset(skip)
             .limit(limit)
         )

@@ -1,76 +1,53 @@
-/**
- * 本地存储工具类
- */
+// 本地存储工具函数
 
-// 获取存储项
-export function getStorageItem(key: string): any {
-  try {
-    const item = localStorage.getItem(key)
-    return item ? JSON.parse(item) : null
-  } catch (e) {
-    console.error(`Error getting storage item ${key}:`, e)
-    return null
-  }
+export const Storage = {
+  // 设置存储
+  set(key: string, value: any): void {
+    try {
+      const jsonValue = JSON.stringify(value)
+      localStorage.setItem(key, jsonValue)
+    } catch (error) {
+      console.error('Storage set error:', error)
+    }
+  },
+
+  // 获取存储
+  get<T = any>(key: string, defaultValue: T | null = null): T | null {
+    try {
+      const item = localStorage.getItem(key)
+      if (item === null) {
+        return defaultValue
+      }
+      return JSON.parse(item) as T
+    } catch (error) {
+      console.error('Storage get error:', error)
+      return defaultValue
+    }
+  },
+
+  // 移除存储
+  remove(key: string): void {
+    try {
+      localStorage.removeItem(key)
+    } catch (error) {
+      console.error('Storage remove error:', error)
+    }
+  },
+
+  // 清空所有存储
+  clear(): void {
+    try {
+      localStorage.clear()
+    } catch (error) {
+      console.error('Storage clear error:', error)
+    }
+  },
 }
 
-// 设置存储项
-export function setStorageItem(key: string, value: any): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-  } catch (e) {
-    console.error(`Error setting storage item ${key}:`, e)
-  }
+// 存储键名常量
+export const STORAGE_KEYS = {
+  TOKEN: 'token',
+  REFRESH_TOKEN: 'refresh_token',
+  USER_INFO: 'user_info',
 }
 
-// 移除存储项
-export function removeStorageItem(key: string): void {
-  try {
-    localStorage.removeItem(key)
-  } catch (e) {
-    console.error(`Error removing storage item ${key}:`, e)
-  }
-}
-
-// 清除所有存储
-export function clearStorage(): void {
-  try {
-    localStorage.clear()
-  } catch (e) {
-    console.error('Error clearing storage:', e)
-  }
-}
-
-// 会话存储相关方法
-export function getSessionItem(key: string): any {
-  try {
-    const item = sessionStorage.getItem(key)
-    return item ? JSON.parse(item) : null
-  } catch (e) {
-    console.error(`Error getting session item ${key}:`, e)
-    return null
-  }
-}
-
-export function setSessionItem(key: string, value: any): void {
-  try {
-    sessionStorage.setItem(key, JSON.stringify(value))
-  } catch (e) {
-    console.error(`Error setting session item ${key}:`, e)
-  }
-}
-
-export function removeSessionItem(key: string): void {
-  try {
-    sessionStorage.removeItem(key)
-  } catch (e) {
-    console.error(`Error removing session item ${key}:`, e)
-  }
-}
-
-export function clearSession(): void {
-  try {
-    sessionStorage.clear()
-  } catch (e) {
-    console.error('Error clearing session:', e)
-  }
-}

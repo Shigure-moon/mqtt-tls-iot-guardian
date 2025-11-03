@@ -8,6 +8,7 @@ from app.schemas.user import (
     UserWithPermissions
 )
 from app.services.user import UserService
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -41,12 +42,24 @@ async def create_user(
 async def read_user_me(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
-) -> User:
+):
     """获取当前用户信息"""
-    user_service = UserService(db)
-    roles = await user_service.get_user_roles(current_user)
-    current_user.roles = [role.name for role in roles]
-    return current_user
+    # 构造返回对象
+    user_dict = {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "mobile": current_user.mobile,
+        "is_active": current_user.is_active,
+        "is_admin": current_user.is_admin,
+        "created_at": current_user.created_at,
+        "updated_at": current_user.updated_at,
+        "last_login_at": current_user.last_login_at,
+        "roles": [],
+        "permissions": []
+    }
+    return UserWithPermissions(**user_dict)
 
 @router.put("/me", response_model=UserResponse)
 async def update_user_me(

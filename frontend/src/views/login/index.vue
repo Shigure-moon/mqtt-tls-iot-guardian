@@ -1,160 +1,151 @@
-&lt;template&gt;
+<template>
   <div class="login-container">
     <div class="login-box">
       <div class="login-header">
-        <img src="@/assets/logo.svg" alt="Logo" class="logo" />
-        <h1>{{ $t('common.welcome') }}</h1>
+        <h1>IoT安全管理系统</h1>
+        <p>基于MQTT与TLS的物联网设备安全管理与入侵检测系统</p>
       </div>
-      
+
       <el-form
-        ref="formRef"
-        :model="formData"
-        :rules="rules"
+        ref="loginFormRef"
+        :model="loginForm"
+        :rules="loginRules"
         class="login-form"
-        @keyup.enter="handleSubmit"
+        @submit.prevent="handleLogin"
       >
         <el-form-item prop="username">
           <el-input
-            v-model="formData.username"
-            :placeholder="$t('auth.username')"
+            v-model="loginForm.username"
+            placeholder="用户名"
+            size="large"
             prefix-icon="User"
+            clearable
           />
         </el-form-item>
-        
+
         <el-form-item prop="password">
           <el-input
-            v-model="formData.password"
+            v-model="loginForm.password"
             type="password"
-            :placeholder="$t('auth.password')"
+            placeholder="密码"
+            size="large"
             prefix-icon="Lock"
             show-password
+            @keyup.enter="handleLogin"
           />
         </el-form-item>
-        
-        <el-form-item class="login-options">
-          <el-checkbox v-model="rememberMe">
-            {{ $t('auth.remember_me') }}
-          </el-checkbox>
-          <el-link type="primary" :underline="false">
-            {{ $t('auth.forgot_password') }}
-          </el-link>
-        </el-form-item>
-        
+
         <el-form-item>
           <el-button
             type="primary"
-            class="login-button"
+            size="large"
             :loading="loading"
-            @click="handleSubmit"
+            class="login-button"
+            @click="handleLogin"
           >
-            {{ $t('auth.login') }}
+            登录
           </el-button>
         </el-form-item>
       </el-form>
+
+      <div class="login-footer">
+        <el-link type="primary" underline="never">忘记密码？</el-link>
+      </div>
     </div>
   </div>
-&lt;/template&gt;
+</template>
 
-<script lang="ts" setup>
-import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+<script setup lang="ts">
+import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import type { FormInstance } from 'element-plus'
-import type { LoginData } from '@/types/user'
 
 const router = useRouter()
-const route = useRoute()
 const userStore = useUserStore()
 
-const formRef = ref<FormInstance>()
+const loginFormRef = ref<FormInstance>()
 const loading = ref(false)
-const rememberMe = ref(false)
 
-const formData = ref<LoginData>({
+const loginForm = reactive({
   username: '',
-  password: ''
+  password: '',
 })
 
-// 表单验证规则
-const rules = {
+const loginRules: FormRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
-  ]
+    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' },
+  ],
 }
 
-// 处理登录提交
-const handleSubmit = async () => {
-  if (!formRef.value) return
-  
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    
-    try {
+const handleLogin = async () => {
+  if (!loginFormRef.value) return
+
+  await loginFormRef.value.validate(async (valid) => {
+    if (valid) {
       loading.value = true
-      await userStore.login(formData.value.username, formData.value.password)
-      
-      // 如果有重定向地址，跳转到重定向地址
-      const redirect = route.query.redirect as string
-      router.replace(redirect || '/')
-      
-      ElMessage.success('登录成功')
-    } catch (error: any) {
-      ElMessage.error(error.message || '登录失败')
-    } finally {
-      loading.value = false
+      try {
+        await userStore.login(loginForm)
+        ElMessage.success('登录成功')
+        router.push('/')
+      } catch (error: any) {
+        ElMessage.error(error.message || '登录失败')
+      } finally {
+        loading.value = false
+      }
     }
   })
 }
 </script>
 
-<style lang="scss" scoped>
+<style scoped lang="scss">
 .login-container {
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #1890ff 0%, #001529 100%);
-  
-  .login-box {
-    width: 400px;
-    padding: 40px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-    
-    .login-header {
-      text-align: center;
-      margin-bottom: 40px;
-      
-      .logo {
-        width: 80px;
-        margin-bottom: 16px;
-      }
-      
-      h1 {
-        font-size: 24px;
-        color: #1890ff;
-        margin: 0;
-      }
+  justify-content: center;
+}
+
+.login-box {
+  width: 400px;
+  padding: 40px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+
+  .login-header {
+    text-align: center;
+    margin-bottom: 40px;
+
+    h1 {
+      font-size: 24px;
+      color: #303133;
+      margin-bottom: 8px;
     }
-    
-    .login-form {
-      .login-options {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      
-      .login-button {
-        width: 100%;
-      }
+
+    p {
+      font-size: 14px;
+      color: #909399;
     }
+  }
+
+  .login-form {
+    .login-button {
+      width: 100%;
+      margin-top: 10px;
+    }
+  }
+
+  .login-footer {
+    margin-top: 20px;
+    text-align: center;
   }
 }
 </style>
+

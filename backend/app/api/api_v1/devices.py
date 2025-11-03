@@ -1,15 +1,18 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.api_v1.auth import get_current_active_user
 from app.core.database import get_db
 from app.schemas.device import (
     Device, DeviceCreate, DeviceUpdate,
     DeviceCertificate, DeviceCertificateCreate,
-    DeviceLog, DeviceLogCreate, DeviceStats
+    DeviceLog, DeviceLogCreate, DeviceStats,
+    FirmwareGenerateRequest, FirmwareResponse
 )
 from app.services.device import DeviceService
 from app.schemas.user import User
+from app.services.firmware import FirmwareService
+from app.services.certificate import CertificateService
 
 router = APIRouter()
 
@@ -196,4 +199,89 @@ async def get_device_stats(
         online_duration=0,
         last_seen=device.last_online_at,
         error_count=0
+    )
+
+@router.post("/{device_id}/firmware/generate", response_model=FirmwareResponse)
+async def generate_device_firmware(
+    device_id: str,
+    firmware_config: FirmwareGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> FirmwareResponse:
+    """生成设备烧录代码"""
+    device_service = DeviceService(db)
+    device = await device_service.get_by_device_id(device_id)
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="设备不存在"
+        )
+    
+    # 获取CA证书（如果需要TLS）
+    ca_cert = None
+    if firmware_config.ca_cert:
+        ca_cert = firmware_config.ca_cert
+    else:
+        # 如果没有提供，尝试从服务获取
+        try:
+            ca_cert_data = CertificateService.get_ca_certificate()
+            if ca_cert_data:
+                ca_cert = ca_cert_data
+        except Exception as e:
+            # 如果获取失败，使用默认提示
+            pass
+    
+    # 生成固件代码
+    firmware_code = FirmwareService.generate_firmware_code(
+        device_id=device.device_id,
+        device_name=device.name,
+        wifi_ssid=firmware_config.wifi_ssid,
+        wifi_password=firmware_config.wifi_password,
+        mqtt_server=firmware_config.mqtt_server,
+        ca_cert=ca_cert
+    )
+    
+    # 保存到文件（可选）
+    firmware_file = FirmwareService.save_firmware_to_file(
+        device_id=device.device_id,
+        firmware_code=firmware_code
+    )
+    
+    return FirmwareResponse(
+        device_id=device.device_id,
+        firmware_code=firmware_code,
+        message=f"固件代码已生成并保存到 {firmware_file}"
+    )
+
+@router.get("/{device_id}/firmware/download")
+async def download_device_firmware(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Response:
+    """下载设备烧录代码文件"""
+    device_service = DeviceService(db)
+    device = await device_service.get_by_device_id(device_id)
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="设备不存在"
+        )
+    
+    # 尝试从文件加载
+    firmware_code = FirmwareService.load_firmware_from_file(device_id=device.device_id)
+    
+    if not firmware_code:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="固件文件不存在，请先生成固件代码"
+        )
+    
+    # 返回文件内容
+    return Response(
+        content=firmware_code,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f"attachment; filename={device.device_id}.ino"
+        }
     )

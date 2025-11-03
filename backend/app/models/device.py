@@ -18,6 +18,9 @@ class Device(Base):
     last_online_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # 关系定义（使用 backref，因为已经通过 backref 定义了其他关系）
+    # 注意：如果使用 back_populates，需要确保所有模型都正确导入
 
 class DeviceCertificate(Base):
     __tablename__ = "device_certificates"

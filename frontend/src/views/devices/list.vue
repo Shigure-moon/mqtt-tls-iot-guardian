@@ -1,451 +1,479 @@
-&lt;template&gt;
-  <div class="device-list">
-    <page-header
-      :title="$t('device.devices')"
-      :description="$t('device.devices_description')"
-    />
-    
-    <div class="device-content">
-      <!-- 搜索和操作栏 -->
-      <div class="action-bar">
-        <div class="search-box">
-          <el-input
-            v-model="searchQuery"
-            :placeholder="$t('common.search')"
-            prefix-icon="Search"
-            clearable
-            @input="handleSearch"
-          >
-            <template #append>
-              <el-button @click="showAdvancedSearch = true">
-                {{ $t('common.advanced_search') }}
-              </el-button>
-            </template>
-          </el-input>
-        </div>
-        
-        <div class="action-buttons">
-          <el-button type="primary" @click="handleCreate">
+<template>
+  <div class="devices-page">
+    <el-card>
+      <template #header>
+        <div class="card-header">
+          <span>设备列表</span>
+          <el-button type="primary" @click="handleAdd">
             <el-icon><Plus /></el-icon>
-            {{ $t('device.add_device') }}
-          </el-button>
-          <el-button @click="handleRefresh">
-            <el-icon><Refresh /></el-icon>
-            {{ $t('common.refresh') }}
+            添加设备
           </el-button>
         </div>
-      </div>
+      </template>
 
-      <!-- 设备表格 -->
       <el-table
         v-loading="loading"
-        :data="devices"
-        border
+        :data="deviceList"
         style="width: 100%"
       >
-        <el-table-column type="selection" width="55" />
-        
-        <el-table-column
-          prop="name"
-          :label="$t('device.device_name')"
-          min-width="150"
-        >
-          <template #default="{ row }">
-            <router-link
-              :to="{ name: 'DeviceDetail', params: { id: row.id }}"
-              class="device-name-link"
-            >
-              {{ row.name }}
-            </router-link>
-          </template>
-        </el-table-column>
-        
-        <el-table-column
-          prop="model"
-          :label="$t('device.device_model')"
-          min-width="120"
-        />
-        
-        <el-table-column
-          prop="serial_number"
-          :label="$t('device.serial_number')"
-          min-width="150"
-        />
-        
-        <el-table-column
-          prop="status"
-          :label="$t('device.status')"
-          width="100"
-        >
+        <el-table-column prop="device_id" label="设备ID" width="180" />
+        <el-table-column prop="name" label="设备名称" />
+        <el-table-column prop="type" label="设备类型" width="120" />
+        <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">
-              {{ $t(`device.status_types.${row.status}`) }}
+              {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        
-        <el-table-column
-          prop="connection_status"
-          :label="$t('device.connection_status')"
-          width="120"
-        >
+        <el-table-column prop="last_online_at" label="最后在线时间" width="180">
           <template #default="{ row }">
-            <el-tag :type="getConnectionStatusType(row.connection_status)">
-              {{ $t(`device.connection_status_types.${row.connection_status}`) }}
-            </el-tag>
+            {{ formatTime(row.last_online_at) }}
           </template>
         </el-table-column>
-        
-        <el-table-column
-          prop="last_online_at"
-          :label="$t('device.last_online')"
-          width="180"
-        >
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            {{ formatDateTime(row.last_online_at) }}
-          </template>
-        </el-table-column>
-        
-        <el-table-column
-          :label="$t('common.actions')"
-          width="200"
-          fixed="right"
-        >
-          <template #default="{ row }">
-            <el-button
-              type="primary"
-              link
-              @click="handleEdit(row)"
-            >
-              {{ $t('common.edit') }}
+            <el-button link type="primary" @click="handleView(row)">
+              查看
             </el-button>
-            <el-button
-              type="primary"
-              link
-              @click="handleMonitor(row)"
-            >
-              {{ $t('device.monitor') }}
+            <el-button link type="primary" @click="handleEdit(row)">
+              编辑
             </el-button>
-            <el-button
-              type="danger"
-              link
-              @click="handleDelete(row)"
-            >
-              {{ $t('common.delete') }}
+            <el-button link type="danger" @click="handleDelete(row)">
+              删除
             </el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
-      <div class="pagination">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
-      </div>
-    </div>
+      <el-pagination
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.size"
+        :total="pagination.total"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        style="margin-top: 20px; justify-content: flex-end"
+        @size-change="fetchDevices"
+        @current-change="fetchDevices"
+      />
+    </el-card>
 
-    <!-- 创建/编辑设备对话框 -->
+    <!-- 添加设备对话框 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="isEdit ? $t('device.edit_device') : $t('device.add_device')"
-      width="600px"
+      title="添加设备并生成烧录代码"
+      width="700px"
+      @close="resetForm"
     >
       <el-form
-        ref="formRef"
-        :model="formData"
-        :rules="rules"
+        ref="deviceFormRef"
+        :model="deviceForm"
+        :rules="deviceFormRules"
         label-width="100px"
       >
-        <el-form-item :label="$t('device.device_name')" prop="name">
-          <el-input v-model="formData.name" />
-        </el-form-item>
-        
-        <el-form-item :label="$t('device.device_model')" prop="model">
-          <el-input v-model="formData.model" />
-        </el-form-item>
-        
-        <el-form-item :label="$t('device.serial_number')" prop="serial_number">
-          <el-input v-model="formData.serial_number" />
-        </el-form-item>
-        
-        <el-form-item :label="$t('device.description')" prop="description">
+        <el-form-item label="设备ID" prop="device_id">
           <el-input
-            v-model="formData.description"
+            v-model="deviceForm.device_id"
+            placeholder="请输入设备ID（唯一标识符）"
+          />
+          <div class="form-tip">
+            设备唯一标识符，例如：esp8266-001
+          </div>
+        </el-form-item>
+
+        <el-form-item label="设备名称" prop="name">
+          <el-input
+            v-model="deviceForm.name"
+            placeholder="请输入设备名称"
+          />
+        </el-form-item>
+
+        <el-form-item label="设备类型" prop="type">
+          <el-select
+            v-model="deviceForm.type"
+            placeholder="请选择设备类型"
+            style="width: 100%"
+          >
+            <el-option label="ESP8266" value="ESP8266" />
+            <el-option label="ESP32" value="ESP32" />
+            <el-option label="树莓派" value="RaspberryPi" />
+            <el-option label="其他" value="Other" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="设备描述" prop="description">
+          <el-input
+            v-model="deviceForm.description"
             type="textarea"
             :rows="3"
+            placeholder="请输入设备描述"
           />
         </el-form-item>
-        
-        <el-form-item :label="$t('device.metadata')" prop="metadata">
+
+        <el-divider>WiFi配置</el-divider>
+
+        <el-form-item label="WiFi SSID" prop="wifi_ssid">
           <el-input
-            v-model="metadataStr"
-            type="textarea"
-            :rows="5"
-            :placeholder="$t('device.metadata_placeholder')"
+            v-model="deviceForm.wifi_ssid"
+            placeholder="请输入WiFi网络名称"
           />
+        </el-form-item>
+
+        <el-form-item label="WiFi密码" prop="wifi_password">
+          <el-input
+            v-model="deviceForm.wifi_password"
+            type="password"
+            placeholder="请输入WiFi密码"
+            show-password
+          />
+        </el-form-item>
+
+        <el-form-item label="MQTT服务器" prop="mqtt_server">
+          <el-input
+            v-model="deviceForm.mqtt_server"
+            placeholder="请输入MQTT服务器地址"
+          />
+          <div class="form-tip">
+            填写服务器IP地址（如192.168.1.8），设备需能访问该地址
+          </div>
+        </el-form-item>
+
+        <el-divider>证书配置</el-divider>
+
+        <el-form-item>
+          <el-checkbox v-model="deviceForm.generate_cert">
+            自动生成TLS证书
+          </el-checkbox>
+        </el-form-item>
+
+        <el-form-item v-if="deviceForm.generate_cert" label="证书有效期" prop="validity_days">
+          <el-input-number
+            v-model="deviceForm.validity_days"
+            :min="30"
+            :max="3650"
+            :precision="0"
+            style="width: 100%"
+          />
+          <div class="form-tip">
+            证书有效期（天），建议365天
+          </div>
         </el-form-item>
       </el-form>
-      
+
       <template #footer>
-        <el-button @click="dialogVisible = false">
-          {{ $t('common.cancel') }}
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="submitForm">
+          {{ submitLoading ? '处理中...' : '添加并生成代码' }}
         </el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitting">
-          {{ $t('common.confirm') }}
+      </template>
+    </el-dialog>
+
+    <!-- 烧录代码生成成功对话框 -->
+    <el-dialog
+      v-model="codeDialogVisible"
+      title="设备添加成功"
+      width="800px"
+    >
+      <div style="margin-bottom: 20px;">
+        <el-alert
+          type="success"
+          title="设备已成功添加并生成了烧录代码"
+          :closable="false"
+        />
+      </div>
+
+      <el-card>
+        <template #header>
+          <span>下一步操作</span>
+        </template>
+        <ol style="line-height: 2;">
+          <li>下载生成的Arduino代码文件</li>
+          <li>在Arduino IDE中打开下载的文件</li>
+          <li>选择ESP8266开发板（工具 → 开发板 → ESP8266）</li>
+          <li>将设备连接到电脑</li>
+          <li>选择串口（工具 → 端口）</li>
+          <li>点击"上传"按钮烧录代码</li>
+        </ol>
+      </el-card>
+
+      <template #footer>
+        <el-button @click="codeDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="downloadCode">
+          <el-icon><Download /></el-icon>
+          下载烧录代码
         </el-button>
       </template>
     </el-dialog>
   </div>
-&lt;/template&gt;
+</template>
 
-<script lang="ts" setup>
-import { ref, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormInstance } from 'element-plus'
-import PageHeader from '@/components/PageHeader'
-import { useDeviceStore } from '@/stores/device'
-import type { Device, DeviceCreate } from '@/types/device'
-import { createDevice, updateDevice, deleteDevice } from '@/api/device'
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { Plus, Download } from '@element-plus/icons-vue'
+import request from '@/utils/request'
 
-const deviceStore = useDeviceStore()
-
-// 表格数据和加载状态
-const loading = ref(false)
-const devices = computed(() => deviceStore.devices)
-const total = computed(() => deviceStore.totalDevices)
-
-// 分页
-const currentPage = ref(1)
-const pageSize = ref(10)
-
-// 搜索
-const searchQuery = ref('')
-const showAdvancedSearch = ref(false)
-
-// 表单对话框
-const dialogVisible = ref(false)
-const isEdit = ref(false)
-const submitting = ref(false)
-const formRef = ref<FormInstance>()
-
-const formData = ref<DeviceCreate>({
-  name: '',
-  model: '',
-  serial_number: '',
-  description: '',
-  metadata: {}
-})
-
-// 表单验证规则
-const rules = {
-  name: [
-    { required: true, message: '请输入设备名称', trigger: 'blur' },
-    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
-  ],
-  model: [
-    { required: true, message: '请输入设备型号', trigger: 'blur' }
-  ],
-  serial_number: [
-    { required: true, message: '请输入序列号', trigger: 'blur' }
-  ]
+interface Device {
+  id: string
+  device_id: string
+  name: string
+  type: string
+  description?: string
+  status: string
+  last_online_at?: string
+  attributes?: Record<string, any>
 }
 
-// metadata JSON 字符串
-const metadataStr = computed({
-  get: () => JSON.stringify(formData.value.metadata || {}, null, 2),
-  set: (val) => {
-    try {
-      formData.value.metadata = JSON.parse(val)
-    } catch (e) {
-      // 解析失败时不更新值
-    }
-  }
+const router = useRouter()
+
+const loading = ref(false)
+const deviceList = ref<Device[]>([])
+
+const pagination = ref({
+  page: 1,
+  size: 20,
+  total: 0,
 })
 
-// 获取设备列表
+// 对话框相关
+const dialogVisible = ref(false)
+const submitLoading = ref(false)
+const deviceFormRef = ref<FormInstance>()
+const codeDialogVisible = ref(false)
+const generatedDeviceId = ref('')
+
+const deviceForm = ref({
+  device_id: '',
+  name: '',
+  type: '',
+  description: '',
+  wifi_ssid: '',
+  wifi_password: '',
+  mqtt_server: '192.168.1.8',
+  generate_cert: true,
+  validity_days: 365,
+})
+
+const deviceFormRules: FormRules = {
+  device_id: [
+    { required: true, message: '请输入设备ID', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9_-]+$/, message: '设备ID只能包含字母、数字、下划线和连字符', trigger: 'blur' },
+  ],
+  name: [
+    { required: true, message: '请输入设备名称', trigger: 'blur' },
+  ],
+  type: [
+    { required: true, message: '请选择设备类型', trigger: 'change' },
+  ],
+  wifi_ssid: [
+    { required: true, message: '请输入WiFi SSID', trigger: 'blur' },
+  ],
+  wifi_password: [
+    { required: true, message: '请输入WiFi密码', trigger: 'blur' },
+  ],
+  mqtt_server: [
+    { required: true, message: '请输入MQTT服务器地址', trigger: 'blur' },
+  ],
+  validity_days: [
+    { required: true, message: '请输入证书有效期', trigger: 'blur' },
+  ],
+}
+
+const getStatusType = (status: string) => {
+  const statusMap: Record<string, string> = {
+    active: 'success',
+    inactive: 'info',
+    disabled: 'danger',
+    maintenance: 'warning',
+  }
+  return statusMap[status] || 'info'
+}
+
+const getStatusText = (status: string) => {
+  const statusMap: Record<string, string> = {
+    active: '在线',
+    inactive: '离线',
+    disabled: '已禁用',
+    maintenance: '维护中',
+  }
+  return statusMap[status] || status
+}
+
+const formatTime = (time?: string) => {
+  if (!time) return '-'
+  return new Date(time).toLocaleString('zh-CN')
+}
+
 const fetchDevices = async () => {
   loading.value = true
   try {
-    await deviceStore.fetchDevices({
-      page: currentPage.value,
-      limit: pageSize.value,
-      search: searchQuery.value
-    })
+    const response = await request.get('/devices', {
+      params: {
+        skip: (pagination.value.page - 1) * pagination.value.size,
+        limit: pagination.value.size,
+      },
+    }) as Device[]
+    deviceList.value = Array.isArray(response) ? response : []
+    pagination.value.total = deviceList.value.length
+  } catch (error) {
+    ElMessage.error('获取设备列表失败')
   } finally {
     loading.value = false
   }
 }
 
-// 状态标签类型
-const getStatusType = (status: string) => {
-  const types: Record<string, string> = {
-    active: 'success',
-    inactive: 'info',
-    maintenance: 'warning',
-    retired: 'danger'
-  }
-  return types[status] || 'info'
-}
-
-const getConnectionStatusType = (status: string) => {
-  const types: Record<string, string> = {
-    online: 'success',
-    offline: 'danger',
-    unknown: 'info'
-  }
-  return types[status] || 'info'
-}
-
-// 格式化日期时间
-const formatDateTime = (datetime: string) => {
-  if (!datetime) return '-'
-  return new Date(datetime).toLocaleString()
-}
-
-// 处理创建设备
-const handleCreate = () => {
-  isEdit.value = false
-  formData.value = {
-    name: '',
-    model: '',
-    serial_number: '',
-    description: '',
-    metadata: {}
-  }
+const handleAdd = () => {
   dialogVisible.value = true
 }
 
-// 处理编辑设备
-const handleEdit = (row: Device) => {
-  isEdit.value = true
-  formData.value = {
-    name: row.name,
-    model: row.model,
-    serial_number: row.serial_number,
-    description: row.description || '',
-    metadata: row.metadata || {}
-  }
-  dialogVisible.value = true
+const handleView = (device: Device) => {
+  router.push(`/devices/${device.id}`)
 }
 
-// 处理删除设备
-const handleDelete = async (row: Device) => {
+const handleEdit = (device: Device) => {
+  // 编辑功能暂时不实现
+  ElMessage.info('编辑功能开发中')
+}
+
+const handleDelete = async (device: Device) => {
   try {
     await ElMessageBox.confirm(
-      '确认删除该设备吗？此操作不可恢复。',
-      '警告',
+      `确定要删除设备 "${device.name}" 吗？`,
+      '确认删除',
       {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
-        type: 'warning'
+        type: 'warning',
       }
     )
     
-    await deleteDevice(row.id)
+    await request.delete(`/devices/${device.id}`)
     ElMessage.success('删除成功')
-    await fetchDevices()
-  } catch (error: any) {
+    fetchDevices()
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error('删除失败')
     }
   }
 }
 
-// 处理监控
-const handleMonitor = (row: Device) => {
-  // TODO: 跳转到设备监控页面
+const resetForm = () => {
+  deviceFormRef.value?.resetFields()
+  deviceForm.value = {
+    device_id: '',
+    name: '',
+    type: '',
+    description: '',
+    wifi_ssid: '',
+    wifi_password: '',
+    mqtt_server: '192.168.1.8',
+    generate_cert: true,
+    validity_days: 365,
+  }
 }
 
-// 处理表单提交
-const handleSubmit = async () => {
-  if (!formRef.value) return
+const submitForm = async () => {
+  if (!deviceFormRef.value) return
   
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
+  try {
+    await deviceFormRef.value.validate()
+    submitLoading.value = true
     
-    try {
-      submitting.value = true
-      if (isEdit.value) {
-        // TODO: 处理编辑逻辑
-      } else {
-        await createDevice(formData.value)
-        ElMessage.success('创建成功')
+    // 1. 创建设备
+    const deviceResponse = await request.post('/devices', {
+      device_id: deviceForm.value.device_id,
+      name: deviceForm.value.name,
+      type: deviceForm.value.type,
+      description: deviceForm.value.description || undefined,
+    }) as Device
+    
+    generatedDeviceId.value = deviceForm.value.device_id
+    
+    // 2. 如果选择了生成证书，则生成证书
+    let caCert = ''
+    if (deviceForm.value.generate_cert) {
+      try {
+        const certResponse = await request.post(`/certificates/client/generate/${deviceResponse.device_id}`, {
+          common_name: deviceResponse.name,
+          validity_days: deviceForm.value.validity_days,
+        })
+        caCert = certResponse.ca_cert
+      } catch (error) {
+        console.error('Certificate generation failed:', error)
+        ElMessage.warning('证书生成失败，但设备已创建成功')
       }
-      
-      dialogVisible.value = false
-      await fetchDevices()
-    } catch (error: any) {
-      ElMessage.error(error.message || '操作失败')
-    } finally {
-      submitting.value = false
     }
-  })
+    
+    // 3. 生成烧录代码（代码会保存在后端）
+    await request.post(`/devices/${deviceResponse.device_id}/firmware/generate`, {
+      wifi_ssid: deviceForm.value.wifi_ssid,
+      wifi_password: deviceForm.value.wifi_password,
+      mqtt_server: deviceForm.value.mqtt_server,
+      ca_cert: caCert || undefined,
+    })
+    
+    dialogVisible.value = false
+    codeDialogVisible.value = true
+    ElMessage.success('设备添加成功')
+    fetchDevices()
+  } catch (error) {
+    console.error('Submit error:', error)
+  } finally {
+    submitLoading.value = false
+  }
 }
 
-// 处理搜索
-const handleSearch = () => {
-  currentPage.value = 1
-  fetchDevices()
+const downloadCode = async () => {
+  try {
+    const response = await request.get(`/devices/${generatedDeviceId.value}/firmware/download`, {
+      responseType: 'blob',
+    })
+    
+    // 创建下载链接
+    const blob = new Blob([response as any], { type: 'application/octet-stream' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${generatedDeviceId.value}.ino`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('代码下载成功')
+    codeDialogVisible.value = false
+  } catch (error) {
+    ElMessage.error('下载失败')
+  }
 }
 
-// 处理刷新
-const handleRefresh = () => {
-  fetchDevices()
-}
-
-// 处理分页
-const handleSizeChange = (val: number) => {
-  pageSize.value = val
-  fetchDevices()
-}
-
-const handleCurrentChange = (val: number) => {
-  currentPage.value = val
-  fetchDevices()
-}
-
-// 初始化
 onMounted(() => {
   fetchDevices()
 })
 </script>
 
-<style lang="scss" scoped>
-.device-list {
-  .device-content {
-    margin-top: 24px;
-  }
-
-  .action-bar {
+<style scoped lang="scss">
+.devices-page {
+  .card-header {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 16px;
-
-    .search-box {
-      width: 400px;
-    }
+    align-items: center;
+    font-weight: bold;
   }
 
-  .device-name-link {
-    color: #1890ff;
-    text-decoration: none;
-    
-    &:hover {
-      text-decoration: underline;
-    }
+  .form-tip {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    margin-top: 4px;
   }
 
-  .pagination {
-    margin-top: 16px;
-    display: flex;
-    justify-content: flex-end;
+  ol {
+    padding-left: 20px;
+  }
+
+  ol li {
+    margin: 8px 0;
   }
 }
 </style>

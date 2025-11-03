@@ -71,3 +71,14 @@ class DeviceStats(BaseModel):
     online_duration: int
     last_seen: Optional[datetime]
     error_count: int
+
+class FirmwareGenerateRequest(BaseModel):
+    wifi_ssid: str
+    wifi_password: str
+    mqtt_server: str
+    ca_cert: Optional[str] = None
+
+class FirmwareResponse(BaseModel):
+    device_id: str
+    firmware_code: str
+    message: str

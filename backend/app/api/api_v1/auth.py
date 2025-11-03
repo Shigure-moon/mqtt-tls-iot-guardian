@@ -13,57 +13,6 @@ from datetime import timedelta
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
-@router.post("/login", response_model=Token)
-async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db)
-):
-    """用户登录"""
-    user_service = UserService(db)
-    user = await user_service.authenticate(
-        username=form_data.username,
-        password=form_data.password
-    )
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token = create_access_token(
-        data={"sub": user.username},
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    refresh_token = create_refresh_token(data={"sub": user.username})
-    
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer"
-    }
-
-@router.post("/register", response_model=User)
-async def register(
-    user_data: UserCreate,
-    db: AsyncSession = Depends(get_db)
-):
-    """用户注册"""
-    user_service = UserService(db)
-    # 检查用户名是否已存在
-    if await user_service.get_by_username(username=user_data.username):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="用户名已存在"
-        )
-    # 检查邮箱是否已存在
-    if await user_service.get_by_email(email=user_data.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="邮箱已被使用"
-        )
-    
-    return await user_service.create(user_data)
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -156,26 +105,26 @@ async def refresh_token(
 
 @router.post("/register", response_model=User)
 async def register(
-    user_in: UserCreate,
+    user_data: UserCreate,
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """用户注册"""
     user_service = UserService(db)
     
     # 检查用户名是否已存在
-    if await user_service.get_by_username(user_in.username):
+    if await user_service.get_by_username(user_data.username):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="用户名已存在"
         )
     
     # 检查邮箱是否已存在
-    if await user_service.get_by_email(user_in.email):
+    if await user_service.get_by_email(user_data.email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="邮箱已被注册"
         )
     
     # 创建新用户
-    user = await user_service.create(user_in)
+    user = await user_service.create(user_data)
     return user

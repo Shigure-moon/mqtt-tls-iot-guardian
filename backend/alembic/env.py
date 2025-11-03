@@ -1,3 +1,11 @@
+import sys
+from pathlib import Path
+
+# 添加backend目录到Python路径，以便能够导入app模块
+backend_dir = Path(__file__).parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config

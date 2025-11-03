@@ -1,47 +1,61 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from app.core.security import get_password_hash
+import sys
+from pathlib import Path
+
+# 添加backend目录到Python路径，以便能够导入app模块
+backend_dir = Path(__file__).parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
+from sqlalchemy.orm import Session
+from app.core.database import SessionLocal
 from app.models.user import User
-import uuid
+from app.core.security import get_password_hash
+import logging
 
-# 数据库连接配置
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:password@localhost:5433/iot_security"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# 创建数据库引擎
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def init_admin():
-    db = SessionLocal()
+def init_admin(db: Session):
     try:
         # 检查管理员是否已存在
         admin = db.query(User).filter(User.username == "admin").first()
         if admin:
-            print("管理员用户已存在")
+            logger.info("管理员用户已存在")
             return
         
         # 创建管理员用户
         admin = User(
-            id=uuid.uuid4(),
             username="admin",
             email="admin@example.com",
-            hashed_password=get_password_hash("Admin123!@#"),
-            full_name="System Administrator",
+            hashed_password=get_password_hash("admin123"),
             is_active=True,
             is_admin=True
         )
-        
         db.add(admin)
         db.commit()
-        print("管理员用户创建成功")
-        print("用户名: admin")
-        print("密码: Admin123!@#")
-        
+        logger.info("管理员用户创建成功！")
+        logger.info("用户名: admin")
+        logger.info("密码: admin123")
     except Exception as e:
-        print(f"创建管理员用户失败: {str(e)}")
         db.rollback()
-    finally:
-        db.close()
+        logger.error(f"创建管理员用户失败: {str(e)}")
+        raise
+
+def main():
+    """主函数"""
+    try:
+        db = SessionLocal()
+        try:
+            init_admin(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"程序执行失败: {str(e)}")
+        logger.error("请确保:")
+        logger.error("1. 数据库服务已启动")
+        logger.error("2. 环境变量已正确配置")
+        logger.error("3. 数据库表已创建（运行 alembic upgrade head）")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    init_admin()
+    main()

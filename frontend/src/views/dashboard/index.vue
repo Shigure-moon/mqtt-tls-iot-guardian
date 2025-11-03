@@ -1,335 +1,239 @@
-&lt;template&gt;
+<template>
   <div class="dashboard">
-    <page-header
-      :title="$t('common.dashboard')"
-      :description="$t('common.dashboard_description')"
-    />
-    
-    <div class="dashboard-content">
-      <!-- 统计卡片 -->
-      <el-row :gutter="20" class="dashboard-stats">
-        <el-col :span="6" v-for="stat in stats" :key="stat.title">
-          <el-card class="stat-card" :body-style="{ padding: '20px' }">
-            <div class="stat-icon" :style="{ background: stat.color }">
-              <el-icon>
-                <component :is="stat.icon" />
-              </el-icon>
-            </div>
+    <el-row :gutter="20" class="stats-row">
+      <el-col :xs="24" :sm="12" :md="6" v-for="stat in stats" :key="stat.title">
+        <el-card class="stat-card">
+          <div class="stat-content">
             <div class="stat-info">
               <div class="stat-title">{{ stat.title }}</div>
               <div class="stat-value">{{ stat.value }}</div>
-              <div class="stat-change" :class="{ up: stat.change > 0, down: stat.change < 0 }">
-                {{ stat.change > 0 ? '+' : '' }}{{ stat.change }}%
-              </div>
             </div>
-          </el-card>
-        </el-col>
-      </el-row>
-
-      <!-- 图表区域 -->
-      <el-row :gutter="20" class="dashboard-charts">
-        <el-col :span="16">
-          <el-card class="chart-card">
-            <template #header>
-              <div class="chart-header">
-                <span>{{ $t('monitoring.device_metrics') }}</span>
-                <el-select v-model="selectedMetric" size="small">
-                  <el-option
-                    v-for="metric in metrics"
-                    :key="metric.value"
-                    :label="metric.label"
-                    :value="metric.value"
-                  />
-                </el-select>
-              </div>
-            </template>
-            <div class="chart-container">
-              <v-chart :option="chartOption" autoresize />
+            <div class="stat-icon">
+              <el-icon :size="48" :color="stat.color">
+                <component :is="stat.icon" />
+              </el-icon>
             </div>
-          </el-card>
-        </el-col>
-        
-        <el-col :span="8">
-          <el-card class="chart-card">
-            <template #header>
-              <div class="chart-header">
-                <span>{{ $t('device.status_distribution') }}</span>
-              </div>
-            </template>
-            <div class="chart-container">
-              <v-chart :option="pieOption" autoresize />
-            </div>
-          </el-card>
-        </el-col>
-      </el-row>
-
-      <!-- 最近活动 -->
-      <el-card class="recent-activities">
-        <template #header>
-          <div class="activities-header">
-            <span>{{ $t('common.recent_activities') }}</span>
-            <el-button type="primary" link>
-              {{ $t('common.view_all') }}
-            </el-button>
           </div>
-        </template>
-        
-        <el-timeline>
-          <el-timeline-item
-            v-for="activity in activities"
-            :key="activity.id"
-            :timestamp="activity.time"
-            :type="activity.type"
-          >
-            {{ activity.content }}
-          </el-timeline-item>
-        </el-timeline>
-      </el-card>
-    </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="20" style="margin-top: 20px">
+      <el-col :xs="24" :sm="24" :md="16">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>设备状态统计</span>
+            </div>
+          </template>
+          <div id="device-chart" style="height: 300px"></div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="24" :md="8">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>最近活动</span>
+            </div>
+          </template>
+          <el-timeline>
+            <el-timeline-item
+              v-for="(activity, index) in activities"
+              :key="index"
+              :timestamp="activity.time"
+            >
+              {{ activity.content }}
+            </el-timeline-item>
+          </el-timeline>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
-&lt;/template&gt;
+</template>
 
-<script lang="ts" setup>
-import { ref, onMounted } from 'vue'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart, PieChart } from 'echarts/charts'
-import {
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent
-} from 'echarts/components'
-import VChart from 'vue-echarts'
-import PageHeader from '@/components/PageHeader'
-import { useDeviceStore } from '@/stores/device'
-import type { MetricData } from '@/api/monitoring'
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
+import { Monitor, Connection, Warning, Check } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
+import request from '@/utils/request'
 
-// 注册 ECharts 组件
-use([
-  CanvasRenderer,
-  LineChart,
-  PieChart,
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent
-])
+interface Device {
+  id: string
+  device_id: string
+  name: string
+  type: string
+  description?: string
+  status: string
+  last_online_at?: string
+  attributes?: Record<string, any>
+}
 
-const deviceStore = useDeviceStore()
-
-// 统计数据
 const stats = ref([
-  {
-    title: '总设备数',
-    value: 0,
-    change: 5.2,
-    icon: 'Monitor',
-    color: '#1890ff'
-  },
-  {
-    title: '在线设备',
-    value: 0,
-    change: 3.1,
-    icon: 'Connection',
-    color: '#52c41a'
-  },
-  {
-    title: '告警数量',
-    value: 0,
-    change: -2.4,
-    icon: 'Warning',
-    color: '#faad14'
-  },
-  {
-    title: '今日流量',
-    value: '1.2TB',
-    change: 8.5,
-    icon: 'DataLine',
-    color: '#722ed1'
-  }
+  { title: '总设备数', value: '0', icon: Monitor, color: '#409eff' },
+  { title: '在线设备', value: '0', icon: Connection, color: '#67c23a' },
+  { title: '安全事件', value: '0', icon: Warning, color: '#f56c6c' },
+  { title: '系统健康度', value: '100%', icon: Check, color: '#67c23a' },
 ])
 
-// 指标选项
-const metrics = [
-  { label: 'CPU 使用率', value: 'cpu_usage' },
-  { label: '内存使用率', value: 'memory_usage' },
-  { label: '网络流量', value: 'network_traffic' },
-  { label: '磁盘使用率', value: 'disk_usage' }
-]
-const selectedMetric = ref('cpu_usage')
+const activities = ref<Array<{ time: string; content: string }>>([])
 
-// 图表配置
-const chartOption = ref({
-  tooltip: {
-    trigger: 'axis'
-  },
-  grid: {
-    left: '3%',
-    right: '4%',
-    bottom: '3%',
-    containLabel: true
-  },
-  xAxis: {
-    type: 'category',
-    boundaryGap: false,
-    data: []
-  },
-  yAxis: {
-    type: 'value'
-  },
-  series: [
-    {
-      name: 'CPU Usage',
-      type: 'line',
-      smooth: true,
-      data: []
+let chartInstance: echarts.ECharts | null = null
+
+const loadStats = async () => {
+  try {
+    const devices = await request.get('/devices', {
+      params: { skip: 0, limit: 1000 }
+    }) as Device[]
+    
+    // 计算统计数据
+    const total = devices.length
+    const online = devices.filter(d => d.status === 'online').length
+    
+    // 更新统计数据
+    stats.value[0].value = total.toString()
+    stats.value[1].value = online.toString()
+    
+    // 计算系统健康度
+    const healthPercent = total > 0 ? Math.round((online / total) * 100) : 100
+    stats.value[3].value = `${healthPercent}%`
+    
+    // 加载安全事件统计
+    try {
+      const securityStats = await request.get('/security/stats') as any
+      stats.value[2].value = securityStats.total_events?.toString() || '0'
+    } catch (error) {
+      console.error('Failed to load security stats:', error)
     }
-  ]
-})
+    
+    // 加载最近活动（审计日志）
+    loadRecentActivities()
+  } catch (error) {
+    console.error('Failed to load stats:', error)
+  }
+}
 
-const pieOption = ref({
-  tooltip: {
-    trigger: 'item'
-  },
-  legend: {
-    orient: 'vertical',
-    left: 'left'
-  },
-  series: [
-    {
-      name: '设备状态',
-      type: 'pie',
-      radius: '50%',
-      data: [
-        { value: 235, name: '在线' },
-        { value: 110, name: '离线' },
-        { value: 34, name: '维护中' },
-        { value: 15, name: '故障' }
-      ],
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 10,
-          shadowOffsetX: 0,
-          shadowColor: 'rgba(0, 0, 0, 0.5)'
-        }
+const loadRecentActivities = async () => {
+  try {
+    const logs = await request.get('/security/audit-logs', {
+      params: { skip: 0, limit: 10 }
+    }) as any[]
+    
+    activities.value = logs.map(log => ({
+      time: new Date(log.created_at).toLocaleString('zh-CN'),
+      content: `${log.action}: ${log.target_type} ${log.target_id || ''}`
+    }))
+  } catch (error) {
+    console.error('Failed to load activities:', error)
+    activities.value = []
+  }
+}
+
+const loadChart = async () => {
+  try {
+    const devices = await request.get('/devices', {
+      params: { skip: 0, limit: 1000 }
+    }) as Device[]
+    
+    // 计算设备统计
+    const online = devices.filter(d => d.status === 'online').length
+    const offline = devices.filter(d => d.status !== 'online').length
+    
+    // 更新图表
+    if (chartInstance) {
+      const option = {
+        tooltip: {
+          trigger: 'axis',
+        },
+        legend: {
+          data: ['在线设备', '离线设备'],
+        },
+        xAxis: {
+          type: 'category',
+          data: ['当前'],
+        },
+        yAxis: {
+          type: 'value',
+        },
+        series: [
+          {
+            name: '在线设备',
+            type: 'bar',
+            data: [online],
+            itemStyle: { color: '#67c23a' },
+          },
+          {
+            name: '离线设备',
+            type: 'bar',
+            data: [offline],
+            itemStyle: { color: '#909399' },
+          },
+        ],
       }
+      
+      chartInstance.setOption(option)
     }
-  ]
+  } catch (error) {
+    console.error('Failed to load chart data:', error)
+  }
+}
+
+onMounted(() => {
+  // 加载统计数据
+  loadStats()
+  
+  // 初始化图表
+  const chartDom = document.getElementById('device-chart')
+  if (chartDom) {
+    chartInstance = echarts.init(chartDom)
+    loadChart()
+  }
 })
 
-// 最近活动
-const activities = ref([
-  {
-    id: 1,
-    content: '设备 DEV-001 触发温度过高告警',
-    time: '2025-11-01 10:00:00',
-    type: 'warning'
-  },
-  {
-    id: 2,
-    content: '新设备 DEV-005 已添加到系统',
-    time: '2025-11-01 09:30:00',
-    type: 'success'
-  },
-  {
-    id: 3,
-    content: '设备 DEV-002 开始例行维护',
-    time: '2025-11-01 09:00:00',
-    type: 'info'
+onUnmounted(() => {
+  if (chartInstance) {
+    chartInstance.dispose()
   }
-])
-
-// 初始化数据
-onMounted(async () => {
-  // 获取设备统计信息
-  await deviceStore.fetchDevices()
-  stats.value[0].value = deviceStore.totalDevices
-  stats.value[1].value = deviceStore.devices.filter(d => d.connection_status === 'online').length
-
-  // TODO: 获取监控数据和图表数据
 })
 </script>
 
-<style lang="scss" scoped>
+<style scoped lang="scss">
 .dashboard {
-  .dashboard-content {
-    margin-top: 24px;
+  .stats-row {
+    margin-bottom: 20px;
   }
 
-  .dashboard-stats {
-    margin-bottom: 24px;
-
-    .stat-card {
-      display: flex;
-      align-items: center;
-
-      .stat-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-right: 16px;
-
-        :deep(.el-icon) {
-          font-size: 24px;
-          color: white;
-        }
-      }
-
-      .stat-info {
-        flex: 1;
-
-        .stat-title {
-          color: #8c8c8c;
-          font-size: 14px;
-        }
-
-        .stat-value {
-          font-size: 24px;
-          font-weight: 600;
-          margin: 4px 0;
-        }
-
-        .stat-change {
-          font-size: 12px;
-
-          &.up {
-            color: #52c41a;
-          }
-
-          &.down {
-            color: #ff4d4f;
-          }
-        }
-      }
-    }
-  }
-
-  .dashboard-charts {
-    margin-bottom: 24px;
-
-    .chart-card {
-      .chart-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .chart-container {
-        height: 300px;
-      }
-    }
-  }
-
-  .recent-activities {
-    .activities-header {
+  .stat-card {
+    .stat-content {
       display: flex;
       justify-content: space-between;
       align-items: center;
+
+      .stat-info {
+        .stat-title {
+          font-size: 14px;
+          color: #909399;
+          margin-bottom: 10px;
+        }
+
+        .stat-value {
+          font-size: 32px;
+          font-weight: bold;
+          color: #303133;
+        }
+      }
+
+      .stat-icon {
+        opacity: 0.8;
+      }
     }
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
   }
 }
 </style>
+

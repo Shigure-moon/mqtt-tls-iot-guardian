@@ -198,4 +198,12 @@ async def get_security_stats(
     """获取安全统计信息"""
     security_service = SecurityService(db)
     stats = await security_service.get_security_stats()
-    return SecurityStats(**stats)
+    
+    # 构造符合SecurityStats schema的响应
+    return SecurityStats(
+        total_events=stats["total_events"],
+        severity_distribution=stats["severity_distribution"],
+        recent_events=stats["recent_events"],
+        top_threats=[],  # TODO: 实现top_threats逻辑
+        active_blacklist_count=stats["active_blacklist_count"]
+    )
