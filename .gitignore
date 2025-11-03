@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Vue
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+
+# Logs
+logs/
+*.log
+
+# Database
+*.sqlite
+*.db
+
+# Certificates
+*.pem
+*.key
+*.crt
+*.csr
+*.srl
+
+# Docker
+.docker/
+
+# Redis
+*.rdb
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Production
+.env.production

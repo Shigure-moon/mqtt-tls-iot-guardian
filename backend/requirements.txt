@@ -1,0 +1,27 @@
+# API Framework
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+python-multipart>=0.0.6
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+pydantic[email]>=2.0.0
+pydantic-settings>=2.0.0
+
+# Database
+sqlalchemy>=2.0.0
+alembic>=1.11.0
+psycopg2-binary>=2.9.6
+redis>=4.6.0
+
+# MQTT
+paho-mqtt>=2.0.0
+
+# Security
+cryptography>=41.0.0
+pyOpenSSL>=23.2.0
+certifi>=2023.5.7
+
+# Utils
+python-dateutil>=2.8.2
+aiofiles>=23.1.0
+ujson>=5.8.0

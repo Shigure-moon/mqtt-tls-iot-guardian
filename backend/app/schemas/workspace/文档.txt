@@ -1,0 +1,831 @@
+快速开始
+环境准备
+注意
+
+本地环境需要安装 Node.js、pnpm 和 Git。
+如遇到依赖安装问题请试着将环境按照作者开发时的版本安装。
+本项目强制使用 pnpm。如果不想使用pnpm，将 package.json 中的 scripts.preinstall 删除即可。
+作者开发环境版本参考
+Node.js v20.10.0
+pnpm v8.13.1
+开发工具
+本项目使用 VsCode 作为开发工具，你可以选择自己熟悉的 IDE。
+
+如果你也使用 VsCode 作为本项目开发工具，为了提高效率和有更好的体验，为您推荐以下插件，已在.vscode目录做了推荐配置，使用 VsCode 打开项目后会有提示是否安装。
+
+Iconify IntelliSense - 图标插件
+Tailwind CSS IntelliSense - windicss 提示插件
+I18n-ally - i18n 插件
+Vue3 Snippets - vue3 代码片段快速生成
+Volar - vue 开发必备
+ESLint - 代码检查
+Element Plus Snippets - ElementPlus 标签快速生成
+DotENV - .env 文件文本高亮
+安装运行
+从远程仓库拉取项目
+
+git clone https://github.com/zhangyuge7/five-admin-v2.git
+安装依赖（已强制使用 pnpm 作为唯一包管理器）
+
+pnpm install
+启动
+
+pnpm dev
+打包
+
+pnpm build
+预览
+
+pnpm preview
+目录结构
+├─mock  # mock文件夹
+├─public    # 公共静态资源目录
+├─src   # 主目录
+│  ├─api    # 接口定义
+│  ├─assets # 资源目录
+│  ├─components # 公共组件
+│  ├─directives # 自定义指令
+│  ├─hooks  # hook
+│  ├─i18n   # 多语言
+│  ├─layout # 布局
+│  ├─router # 路由
+│  ├─stores # Pinia数据仓库
+│  ├─utils  # 工具类
+│  └─views  # 页面
+└─vite  #vite配置
+Last Updated: 2024/5/1
+项目配置
+为简化业务开发工作量，框架提供简单且多样化的配置，让使用者专注于业务开发。
+
+环境配置
+应用配置
+主题配置
+环境配置
+文件位置：/src/.env
+
+所有环境都被加载
+
+# 应用标题
+VITE_APP_TITLE = FiveAdmin-V2
+# 缓存前缀
+VITE_APP_STORAGE_PREFIX = FIVE_ADMIN_V2_
+# 默认首页
+VITE_APP_HOME_PATH = /home
+# 开启mock
+VITE_USE_MOCK = true
+# 应用根路径
+VITE_APP_BASE_PATH = /
+文件位置：/src/.env.development
+
+开发环境被加载
+
+# 端口
+VITE_APP_PORT = 9999
+# http请求代理
+VITE_API_BASE_URL = /api
+VITE_DEV_PROXY = {"/api":"http://localhost:8080/","/upload":"http://localhost:8080/upload"}
+# http请求超时设置
+VITE_API_TIMEOUT = 10000
+文件位置：/src/.env.production
+
+生产环境被加载
+
+# http代理（生产环境使用 Nginx 代理）
+VITE_API_BASE_URL = /api
+# http请求超时设置
+VITE_API_TIMEOUT = 10000
+提示
+
+接入后端时如果不考虑跨域问题，可以这么配置
+
+VITE_APP_BASE_URL = http://localhost:8080
+
+VITE_DEV_PROXY = {}
+
+应用配置
+文件位置：/src/appConfig.js
+
+
+export default {
+  /**
+   * 多语言。'zh-cn' 中文简体 
+   * 'zh-tw' 中文繁体
+   * 'en' 英文
+   */
+  defaultLanguage: 'zh-cn',
+
+  /**
+   * elementplus组件尺寸。
+   * 'default' 默认
+   * 'large' 大
+   * 'small' 小
+   */
+  elementSize: 'default',
+
+  /** 布局。
+   * 'default' 单侧栏
+   * 'doubleAside' 双侧栏
+   * 'crosswise' 无侧栏 
+   * 'mixture' 顶栏主菜单，侧栏子菜单
+   */ 
+  layoutType: 'default',
+
+  // 显示 logo
+  showLogo: true,
+  
+  // 侧栏折叠
+  menuIsCollapse: false,
+  // 仅保持一个子菜单的展开
+  subMenuUniqueOpened: true,
+  // 显示主菜单标题(双侧栏布局有效)
+  isMainMenuShowTitle: true,
+  // 启用侧栏折叠动画
+  enableCollapseTransition: true,
+
+  // 使用多标签页
+  isTabs: true,
+  // 标签显示图标
+  tabsIcon: true,
+  /**
+   * tabs风格。'card' 风格一
+   * 'border-card' 风格二
+   * '' 风格三
+   */
+  tabsType: 'card',
+
+// 启用页面过渡动画
+  isTransition: true,
+  /**
+   * 页面过渡动画。
+   * 'fade' 渐变
+   * 'scale' 缩放
+   * 'slide' 滑动
+   */
+  transitionName: 'fade',
+
+  // 显示页脚
+  showFooter: true,
+  // 页脚显示的文本内容,可以使用多语言文本
+  footerText: 'Copyright © 2023 XXX 拥有所有版权',
+
+  // 灰色模式
+  enableGray: false,
+  // 色弱模式
+  enableColorWeakness: false,
+
+  /**
+   * 路由加载策略
+   * 'frontend' 前端加载
+   * 'backend' 后端加载
+   */
+  routeSource: 'frontend',
+
+  // 动态 html 标题
+  dynamicTitle: true,
+
+  // 404页面显示位置, true：layout内，false：layout 外
+  innerNotFound: true,
+
+  // 固定布局
+  layoutFixed: true,
+
+  /**
+   * 触发方式。主要使用的地方有 horizontal 模式的菜单，Dropdown 下拉菜单组件。
+   * 'hover' 鼠标经过
+   * 'click' 鼠标点击
+   */
+  trigger: 'hover',
+
+  /**
+   * 主题。主题文件：/src/assets/styles/common/theme.scss
+   * '' 默认
+   * 'dark' 暗黑
+   * 'sakura' 樱花粉
+   * 'sky' 天空蓝
+   * 'grassland' 草原绿
+   * 'fantasy' 主题-幻想
+   */
+  theme: '',
+
+  /**
+   * 工具栏收缩
+   */
+  headerToolsOmit: true,
+}
+
+注意
+
+其中 defaultLanguage、elementSize、layoutType、theme 配置会被缓存到浏览器 localStorage，如果非首次启动修改配置后不生效请删除 localStorage 中的缓存数据。
+
+主题配置
+文件位置：/src/assets/styles/common/theme.scss
+
+:root 为默认主题
+html.dark 为暗黑主题
+主题的切换是靠修改 html 的 class 实现
+
+通过修改 css 变量改变应用外观及色彩
+
+框架已预设多款主题，框架中所有自定义的css变量都可以在 :root 中找到
+
+也可以根据需求修改 element-plus 的 css 变量
+
+提示
+
+所有以 --fv 开头 -bg 结尾的变量表示背景，框架中使用 background 引用，而非 background-color
+
+这意味着你不仅可以设置背景纯色，还可以设置渐变、图片、gif等。
+
+Last Updated: 2023/12/30 17:49:37
+Contributors: zhangyuge
+多语言
+框架已集成vue-i18n，已配置的语言有中文简体、中文繁体、英文。
+
+如果这些不能满足你的需求，请查看如何配置
+
+使用
+/src/i18n 目录下有 lang 和 pages 两个目录
+
+lang 中定义了开发框架时使用的文本
+
+业务开发中可以将文本定义在 pages 目录下，按模块或按页面创建，更方便管理。
+
+src
+├─i18n
+│  └─pages
+│      └─system         // 目录名称随意，建议和你的页面或模块同名，方便查找。
+│          └─en.json    // 英文
+│          ├─zh-cn.json // 中文简体
+│          └─zh-tw.json // 中文繁体
+en.json
+zh-cn.json
+zh-tw.json
+{
+  "system": {
+    "menu": "Menu"
+  },
+}
+在<template>中使用
+
+<span>{{ $t('system.menu') }}</span>
+在 JavaScript 中使用
+
+import i18n from '@/i18n'
+const menuText = i18n.global.t('system.menu')
+// 或
+import { t } from '@/i18n'
+const menuText = t('system.menu')
+配置
+如果已有的配置不能满足你的需求，这里介绍如何新增或删除一个语言配置
+
+// /src/i18n/index.js
+
+// 定义多语言文本
+const messages = {
+  // 'en': {}, 删除英文
+  'zh-cn': {},
+  'zh-tw': {},
+  'zh-cn1':{}, // 新增 zh-cn1 语言
+}
+这样就简单的新增了一个 zh-cn1 语言并且删除了一个 en 语言。语言文本文件名必须为 zh-cn1.json
+
+配置语言切换
+
+// /src/appConfig.js
+
+export const defaultLanguages = [
+  { label: '中文简体', value: 'zh-cn' },
+  { label: '中文繁体', value: 'zh-tw' },
+  { label: '新增加的语言', value: 'zh-cn1' }, // 新增 zh-cn1 语言
+//   { label: 'EN', value: 'en' }, // 删除英文
+]
+export default {
+  // 你也可以在这里将 zh-cn1 设为应用的默认语言
+  // 语言设置会缓存在浏览器的localStorage，如果设置默认语言不生效请清空缓存
+  defaultLanguage: 'zh-cn1', 
+}
+
+ElementPlus国际化配置
+本项目与 ElementPlus 语言同步切换需要在这里配置 ElementPlus 语言
+
+语言文本由 ElementPlus 提供，ElementPlus国际化
+
+// /src/hooks/useElementI18n.js
+
+import zhCn from 'element-plus/dist/locale/zh-cn.js'
+import zhTw from 'element-plus/dist/locale/zh-tw.js'
+import en from 'element-plus/dist/locale/en.js'
+import { computed } from 'vue'
+import { useAppStore } from '@/stores/modules/app'
+
+export default function useElementI18n() {
+  const useApp = useAppStore()
+  const locale = computed(() => {
+    return useApp.appConfig.defaultLanguage === 'zh-cn' 
+    ? zhCn : useApp.appConfig.defaultLanguage === 'zh-tw' 
+    ? zhTw : en
+  })
+  return { locale }
+}
+了解更多
+vue-i18n
+
+路由及菜单
+框架的路由和菜单采用强绑定模式，菜单是读取的路由信息动态构建的。
+
+为实现动态菜单及动态路由权限功能，不得不对路由的定义做一些限制，及对路由做一些特殊处理。
+
+目录结构介绍
+1、/src/router/ 目录下有 index.js、base.js、routerUtil.js 文件和 modules 目录
+
+2、index.js 文件负责创建路由器，定义全局路由守卫及路由白名单。
+
+3、base.js 中定义基础路由，如：登录、404等。基础路由在创建路由器时被加载到路由器。
+
+4、routerUtil.js 定义了路由及菜单的处理函数。
+
+5、modules 目录下定义动态路由，动态路由在登录系统后被程序动态加载。modules 下的 js 文件需要向外暴露一个路由对象或一个路由数组。
+
+路由
+路由处理说明
+1、路由器创建时载入的只有 base.js 中暴露的 baseRoutes 的路由。
+
+2、定义的路由前置守卫中规定了无用户认证信息只能访问白名单路由及 name为Login的路由，访问其它路由会被重定向到 Login。
+
+3、如果用户已经认证但是没有用户信息，则请求用户信息接口并将信息使用pinia存储，然后初始化路由。（token持久化到了localStorage，用户信息及菜单仅保存在pinia，刷新浏览器后，pinia 数据会重置，所以需要此步骤）
+
+4、初始化路由提供两种策略
+
+​ (1)、仅加载前端定义的路由：读取 /src/router/modules 目录下所有文件获取路由数据。
+
+​ (2)、仅加载后端定义的路由：请求接口获取路由数据。
+
+​ (3)、加载前端路由数据，加载后端菜单数据：这种策略暂没有考虑添加，需要考虑的细节太多，会使现有的逻辑有较大的改动，如果有需要自行改造。
+
+获取到路由数据后对路由进行权限等处理后动态添加到路由器，并提取菜单信息处理后存储到pinia。（具体处理逻辑代码在 /src/router/routerUtil.js）
+
+如果是加载后端来源的路由数据，排序及权限等建议能在后端处理的应该在后端处理，然后根据需要改造 routerUtil.js 中的处理逻辑，将已经在后端处理过的步骤跳过。
+
+5、动态路由数据加载到路由器时会将 '/' 根路由及其子路由覆盖
+
+白名单
+作用：未认证也可以访问的页面，如系统欢迎页。
+
+由于设计的路由与菜单的加载策略，白名单的路由要在base.js中定义并在index.js的WHITE_LIST数组中添加路由path，因为modules中的路由在未认证时不会被加载。
+
+因为程序在路由器创建时并没有初始化菜单。如果白名单路由定义在Layout组件的路由下，可以访问此路由，但是进入Layout内并不会展示菜单。不建议这样使用，如果需要用户未认证也可以进入Layout，建议使用创建匿名/游客角色使用匿名/游客用户的方式。
+
+/** /src/router/index.js */
+// ......
+// 路由白名单
+const WHITE_LIST = ['/welcome']
+
+/** /src/router/base.js */
+// ......
+// 基础路由
+const baseRoutes = [
+  {
+    path: '/welcome',
+    name: 'Welcome',
+    component: () => import('@/views/welcome/index.vue'),
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/login/index.vue'),
+  },
+  {
+    path: '/:path(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/error-page/NotFound.vue'),
+  }
+]
+路由定义
+/** /src/router/modules/dashboard.js  */
+export default {
+  path: '/dashboard',
+  name: 'Dashboard',
+  redirect: '/dashboard/analysis',
+  meta: {
+    title: 'menus.dashboard',
+    isHide: false,
+    icon: 'ant-design:dashboard-outlined',
+    sortNo: 2,
+  },
+  children: [
+    {
+      path: '/dashboard/analysis',
+      name: 'Analysis',
+      meta: {
+        title: 'menus.analysis',
+        isHide: false,
+        icon: 'ep:data-analysis',
+      },
+      component: () => import('@/views/dashboard/analysis/index.vue'),
+    },
+    {
+      path: '/dashboard/workbench',
+      name: 'Workbench',
+      meta: {
+        title: 'menus.workbench',
+        isHide: false,
+        icon: 'icon-park-outline:workbench',
+      },
+      component: () => import('@/views/dashboard/workbench/index.vue'),
+    },
+  ],
+}
+路由定义必须以 / 开头 不建议路径使用 '' 空字符代替父级的 redirect 效果，推荐显式定义。
+
+Meta
+在定义路由时建议定义meta和meta.title。
+
+{
+    /**
+     * 在菜单中显示的标题。可以是定义好的多语言模板。
+     */
+    title:String, 
+    /**
+     * 在菜单中显示的图标。使用的自定义的 SvgIcon 组件渲染，可以是本地图标或网络中的资源。
+     */
+    icon:String, 
+    /**
+     * 是否在菜单中隐藏。（默认为 false）
+     */
+    isHide: Boolean, 
+    /**
+     * 是否在菜单中隐藏所有子级（默认为 false）。
+     * 当为true时，所有子级的isHide和hideChildren都会被动态赋值为true
+     */
+    hideChildren: Boolean, 
+    /**
+     * 如果有值并以 http: 或 https: 开头，则以外链内嵌方式打开（默认无）
+     */
+    iframeLink:String, 
+    /**
+     * 在 layout 框架外打开（默认为 false）。
+     * 如数据大屏等。
+     * 具有传递性，影响子路由。
+     */
+    isOuter:Boolean, 
+    /**
+     * 可以访问的角色编码（默认无）。
+     * 为 [] 时所有角色都不可以访问，为空值时所有角色都可以访问
+     * 具有传递性，影响子路由。
+     * 当没有权限访问时，此路由的isHide和hideChildren会被动态赋值为true
+     */
+    roles:Array|String, 
+    /**
+     * 是否缓存组件实例（默认为 false）。
+     * 注意：组件名要与对应路由的 name 相同
+     */
+    isKeep:Boolean, 
+    /**
+     * 多标签页模式下是否固定在标签页（默认 false）。
+     */
+    fixedTab: Boolean,
+    /**
+     * 单独配置此页面的过渡动画（默认无）。
+     */
+    transition:String, 
+    /**
+     *  排序号（默认无）
+     */
+    sortNo:Number,
+}
+外链路由
+只需要将路由的path以http:或https:开头即可，不要以/开头。
+
+{
+  // 默认以浏览器新标签页方式跳转，如果有 `,_self`则在此标签页打开链接
+  path: 'http://xxx.xxxxx,_self', 
+  name: 'Xxx',
+  meta: {
+    title: 'XXXX',
+  },
+},
+外链内嵌
+需要将 meta.iframeLink 设置为需要嵌套的链接地址
+
+{
+  path: '/test',
+  name: 'Test',
+  meta: {
+    title: '测试外链内嵌',
+    iframeLink: 'https://localhost:8888',
+  },
+  /** component 可以省略
+   * 路由在由程序加载时根据 meta.iframeLink 判断此路由有内嵌地址
+   * 会自动赋值 component 为 @/layout/main/LayoutIframe.vue 组件
+   */
+  // component: () => import('@/layout/main/LayoutIframe.vue'),
+}
+内嵌路由在切换页面后无法缓存
+
+Layout外部页面
+如数据大屏需要在 Layout 布局外显示的页面，需要将meta.isOuter设置为true
+
+{
+  path: '/screen',
+  name: 'BigScreen',
+  meta: {
+    title: '数据大屏展示',
+    isOuter: true,
+  },
+  component: () => import('@/views/demo/data-big-screen/BigScreen1.vue'),
+},
+通过路由父子级关系实现，动态加载路由时将meta.isOuter 为true的路由提取。
+
+最后使用router.addRoute()添加到路由以覆盖根路由下的此路由
+
+所以isOuter属性是有传递性的，meta.isOuter为true的路由及子路由都会在 Layout 外渲染
+
+路由权限
+meta.roles中规定哪些角色可以访问
+
+roles的值可以是单个角色值的字符串也可以是多个角色的角色值数组
+
+{
+  path: '/demo/permission/page-admin',
+  name: 'PermissionPageAdmin',
+  meta: {
+    title: '路由权限',
+    // 可以使用通配符匹配，表示已 '-admin' 结尾的角色都可以访问此路由
+    roles: ['*-admin'],
+  },
+  component: () => import('@/views/demo/permission/PagePermAdmin.vue'),
+},
+首页
+首页是当用户登录成功之后默认跳转的页面，或者在地址栏输入根路径被重定向到的页面。
+
+默认首页可全局配置或用户单独配置，用户配置优先。（业务开发中可根据需要扩展根据角色或部门分配默认首页）
+
+在 .env 文件中全局配置
+
+// .env
+
+VITE_APP_HOME_PATH = /home
+为用户单独配置只需要设置用户信息的homePath属性值即可
+
+刷新当前页面
+import { refreshPage } from '@/utils/tools'
+refreshPage()
+菜单
+菜单是使用ElementPlus的菜单组件实现。
+
+菜单处理说明
+菜单初始化是在用户信息及动态路由数据初始化后，对路由数据进行处理并生成菜单数据，具体处理逻辑在/src/router/routerUtil.js文件中。
+
+菜单处理过程中会根据路由数据中meta中的配置过滤数据。
+
+不在菜单中显示的条件有：
+
+1、路由的meta.isHide为true
+
+2、父级路由的meta.hideChildren为true
+
+3、路由的meta.roles与用户信息的roles没有匹配项
+
+4、父级路由的meta.roles与用户信息的roles没有匹配项
+
+当路由的meta.isHide为true并且父级路由的meta.hideChildren不为true时，此路由的子级将在树结构中被提升一个层级。
+
+混合布局
+在混合布局中有主菜单和子菜单之分，程序运行时会侦听布局及路由的变化，会根据选择的主菜单项动态修改子菜单的数据及控制是否显示子菜单，当选择的主菜单数据中没有子级时会隐藏子菜单的显示。
+
+Last Updated: 2023/12/30 17:49:37
+Contributors: zhangyuge
+
+权限
+项目提供了开箱即用的权限控制，包括路由、菜单权限和页面元素级的细粒度权限控制。
+
+并提供两种权限控制方案：基于角色、基于权限标识。
+
+基于角色编码
+页面权限
+基于角色编码的路由权限控制是使用路由信息中的meta.roles与用户信息中的roles进行比对，不匹配的路由的component会被动态修改为/src/views/error-page/NotPermission.vue组件。
+
+提示
+
+meta.roles的属性值可以为数组或字符串，可以使用通配符。
+
+如果不设置路由的meta.roles，则此路由不会被权限控制。
+
+如果设置了meta.roles的属性值为空数组，所有人都没有权限访问此路由。
+
+元素级权限
+指令方式
+<el-button v-hasRole="'admin'"> admin角色可见 </el-button>
+<span v-hasRole:or="['admin','*_test']"> admin或以_test结尾角色可见 </span>
+<div v-hasRole:all="['admin','test']"> admin且test角色可见 </div>
+提示
+
+v-hasRole:or --> 值可以为字符串和数组，角色值匹配其一就显示组件/标签
+
+v-hasRole:all --> 值只可以是数组，角色值全部包含才显示组件/标签
+
+v-hasRole --> v-hasRole:or 的简写
+
+函数方式
+<template>
+  <div>
+    <p v-if="hasRole('admin')">admin角色可见</p>
+    <p v-if="hasRole(['admin', 'test'])">admin或test角色可见</p>
+    <p v-if="hasRoleAll(['admin', 'test'])">admin且test角色可见</p>
+  </div>
+</template>
+<script setup>
+import useAuth from '@/hooks/useAuth'
+const { hasRole,hasRoleAll } = useAuth()
+</script>
+提示
+
+hasRole(val: String | Array) --> 当前用户角色与 val 值匹配其一即为 true。
+
+hasRoleAll(arr: Array) --> 当前用户角色必须包含 arr 中的所有值才为 true
+
+基于权限标识符
+页面权限
+此项目没有基于权限标识符对路由及菜单进行过滤，推荐接入后端时在对应的获取路由的接口中处理，将处理后的路由结果响应给前端。
+
+按钮级权限
+指令方式
+<el-button v-hasPerm="'sys:menu:add'"> 拥有 sys:menu:add 权限标识码的用户可见 </el-button>
+<span v-hasPerm:or="['add','del']"> 拥有 add 或 del 权限标识码的用户可见 </span>
+<div v-hasPerm:all="['add','del']"> 拥有 add 且 del 权限标识码的用户可见 </div>
+提示
+
+v-hasPerm:or --> 值可以为字符串和数组，权限标识码匹配其一就显示组件/标签
+
+v-hasPerm:all --> 值只可以是数组，权限标识码全部包含才显示组件/标签
+
+v-hasPerm --> v-hasPerm:or 的简写
+
+函数方式
+<template>
+  <div>
+    <el-button v-if="hasPerm('addButton')"> 拥有 addButton 权限标识码的用户可见 </el-button>
+    <p v-if="hasPerm(['menu:del', 'menu:add'])"> 拥有 menu:del 或 menu:add 权限标识码的用户可见 </p>
+    <p v-if="hasPermAll(['menu', 'menu:add'])"> 拥有 menu 且有 menu:add 权限标识码的用户可见 </p>
+  </div>
+</template>
+<script setup>
+import useAuth from '@/hooks/useAuth'
+const { hasPerm,hasPermAll } = useAuth()
+</script>
+提示
+
+hasPerm(val: String | Array) --> 当前用户权限标识码与 val 值匹配其一即为 true
+
+hasPermAll(arr: Array) --> 当前用户权限标识码必须包含 arr 中的所有值才为 true
+
+通配符
+支持字符串通配符匹配校验
+
+? 字符匹配任何单个字符。
+
+* 字符匹配任何字符序列。
+
+<p v-hasPerm="'*'"> 所有权限可见 </p>
+......
+Last Updated: 2023/12/30 17:49:37
+
+请求
+项目在/src/utils/axios.js中已经简单封装axios实例，如果你有自己习惯的封装可以替换。
+
+封装了些什么？
+
+默认 baseURL
+默认请求超时
+请求时携带 token
+请求时携带时间戳参数
+请求时全局进度条
+响应时 401 返回登录页面
+响应时成功/失败时的消息提示
+其中 baseURL、请求超时、成功/失败时的消息提示，可以在单独请求中单独配置
+
+这里主要描述一下 响应成功/失败时的消息提示 的单独请求配置
+
+/src/utils/axios.js中封装了默认的响应提示，默认情况下响应错误时使用Message提示，响应成功时没有提示。
+
+如果需要对单独的请求配置响应消息提示并指定提示类型，可以在单独请求中设置config的errorMsgType与 successMsgType属性值。
+
+// /src/utils/axios.js
+
+// 响应后消息提示类型
+export const msgType = {
+  none: 'none', // 无提示
+  msg: 'msg', // Message
+  box: 'box', // Message Box
+}
+
+
+// 自定义成功状态码
+export const successCode = 0
+// 响应结果
+export const resultProp = {
+  data: 'data', // 数据
+  code: 'code', // 自定义状态码
+  message: 'message', // 消息
+  ok: 'ok', // 表示是否成功的布尔值
+}
+Last Updated: 2023/12/30 17:49:37
+Contributors: zhangyuge
+介绍
+此项目暂时仅提供此项目开发中用到的通用组件，此项目不会提供太多的组件，业务中有需要请自行封装。
+
+本章介绍的组件都可以在/src/components目录下找到。
+图标
+组件介绍
+SvgIcon 是 SVG 图标组件，可以使用本地 SVG 文件，也可以使用网络中的图标资源。
+
+使用本地资源：将 SVG 文件保存到 /src/assets/icons/svg 目录下，SvgIcon 的 name 属性值使用文件名即可，不需要文件后缀。
+
+使用网络资源：使用网络资源图标中的 xx:xx 格式图标标识，作为SvgIcon 的 name 属性值即可。
+
+图标资源：icones，iconify
+
+提示
+
+可以将SvgIcon组件放到el-icon的插槽中使用，通过el-icon的属性设置图标的颜色及尺寸。
+
+<el-icon color="#fc5531" :size="16">
+    <SvgIcon name="ep:home-filled"/>
+</el-icon>
+属性
+属性名	描述	默认值
+perfix	前缀	'icon'
+name	图标名称	
+Last Updated: 2023/12/30 17:49:37
+Contributors: zhangyuge
+ 介绍
+ 图标选择器
+组件介绍
+IconSelect 是图标选择器组件，可用在表单中用来选择本地图标。
+
+组件运行时加载/src/assets/icons/svg目录下所有图标供使用者选择。
+
+属性
+属性名	描述	默认值
+v-model/modelValue	图标name	
+type	'button' | 'input'	'input'
+width	宽度	'200px'
+popoverWidth	弹窗宽度	''
+scrollbarHeight	弹窗高度	'200px'
+placement	弹窗位置	'bottom'
+Last Updated: 2023/12/30 17:49:37
+Contributors: zhangyuge
+
+使用createWebHistory()路由模式，正式环境刷新浏览器后404
+请查看：HTML5模式与服务器配置示例
+
+在应用配置抽屉中修改的配置不能持久化
+/src/stores/modules/app.js中读取/src/appConfig.js作为应用配置默认值，项目没有将所有配置都持久化，如果需要某个配置持久化需要自行添加。
+
+export const useAppStore = defineStore('app', () => {
+  //......
+}, {
+  persist: {
+    key: `${PREFIX}APPCONFIG`,
+    paths: [
+    // 在这里添加某个需要持久化的配置项或持久化整个appConfig
+      'appConfig.defaultLanguage',
+      'appConfig.elementSize',
+      'appConfig.layoutType',
+      'appConfig.showSubMenu',
+      'appConfig.theme',
+      'appConfig.oldTheme',
+    ],
+    storage: localStorage,
+    debug: true, 
+  },
+})
+
+ElementPlus表单组件Unable to preventDefault inside passive event listener invocation.报错
+在使用ElementPlus的一些表单组件如：输入框可清楚时点击清楚图标，日期组件选择日期，等情况下控制台会有此报错， 此问题由于项目使用default-passive-events依赖造成冲突。
+
+如果不使用default-passive-events依赖，控制台会有警告：Added non-passive event listener to a scroll-blocking <某些> 事件. Consider marking event handler as 'passive' to make the page more responsive. See <URL>element-plus/issues/8123
+
+[Vue warn]: Component inside <Transition> renders non-element root node that cannot be animated.
+项目使用 <Transition>组件实现了页面切换动画，但是在使用过程中，如果组件的根节点不是一个元素，会出现此报错。页面应该有一个根元素节点，注释也算一个元素节点。
+
+<!-- 错误 -->
+<template>
+  <!-- <div>
+    1
+  </div> -->
+  <div>
+    2
+  </div>
+</template>
+
+<!-- 正确 -->
+<template>
+  <div>
+    1
+  </div>
+</template>
+子菜单展开/收缩卡顿问题
+请查看：element-plus/issues/6792
+
+作者建议尽量不适用EpSetting图标

@@ -1,0 +1,111 @@
+.app-layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 240px;
+  background: #001529;
+  color: white;
+  transition: width 0.2s;
+  
+  &.collapsed {
+    width: 80px;
+  }
+
+  .logo {
+    height: 64px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    
+    img {
+      height: 32px;
+      margin-right: 8px;
+    }
+  }
+
+  .menu {
+    .menu-item {
+      a {
+        display: flex;
+        align-items: center;
+        padding: 12px 24px;
+        color: rgba(255, 255, 255, 0.65);
+        text-decoration: none;
+        transition: all 0.3s;
+
+        &:hover, &.router-link-active {
+          color: white;
+          background: #1890ff;
+        }
+
+        .icon {
+          margin-right: 10px;
+        }
+      }
+    }
+  }
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  height: 64px;
+  background: white;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f0f0f0;
+
+  .header-left {
+    .collapse-btn {
+      border: none;
+      background: none;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0;
+      
+      &:hover {
+        color: #1890ff;
+      }
+    }
+  }
+
+  .header-right {
+    .user-info {
+      display: flex;
+      align-items: center;
+
+      .username {
+        margin-right: 12px;
+      }
+
+      .logout-btn {
+        border: none;
+        background: none;
+        color: #1890ff;
+        cursor: pointer;
+        
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+  }
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+  overflow: auto;
+  background: #f0f2f5;
+}

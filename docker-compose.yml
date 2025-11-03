@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    container_name: iot_postgres
+    environment:
+      POSTGRES_DB: iot_security
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - iot_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    container_name: iot_redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - iot_redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  iot_postgres_data:
+  iot_redis_data:
