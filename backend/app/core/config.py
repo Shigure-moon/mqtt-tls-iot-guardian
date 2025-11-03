@@ -31,9 +31,21 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
     
+    # 数据库连接池配置
+    DB_POOL_SIZE: int = 10  # 连接池大小
+    DB_MAX_OVERFLOW: int = 20  # 最大溢出连接数
+    DB_POOL_TIMEOUT: int = 30  # 连接池超时时间（秒）
+    DB_POOL_RECYCLE: int = 3600  # 连接回收时间（秒），1小时
+    DB_POOL_PRE_PING: bool = True  # 连接前验证连接是否有效
+    DB_ECHO: bool = False  # 是否回显SQL语句
+    
     @property
     def DATABASE_URL(self) -> str:
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+    
+    @property
+    def DATABASE_URL_ASYNC(self) -> str:
+        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     # Redis配置
     REDIS_HOST: str

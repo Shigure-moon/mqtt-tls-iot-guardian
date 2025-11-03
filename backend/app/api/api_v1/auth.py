@@ -33,14 +33,55 @@ async def get_current_user(
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
+    except JWTError as e:
         raise credentials_exception
     
-    user_service = UserService(db)
-    user = await user_service.get_by_username(username=username)
-    if user is None:
-        raise credentials_exception
-    return user
+    try:
+        user_service = UserService(db)
+        user = await user_service.get_by_username(username=username)
+        if user is None:
+            raise credentials_exception
+        
+        # Convert SQLAlchemy model to Pydantic schema
+        # FastAPI can handle this automatically, but we need explicit conversion for dependencies
+        try:
+            # Pydantic v2: model_validate with from_attributes mode
+            return User.model_validate(user)
+        except Exception as convert_error:
+            # If Pydantic v2 fails, try manual conversion or Pydantic v1
+            try:
+                if hasattr(User, 'from_orm'):
+                    return User.from_orm(user)
+            except:
+                pass
+            
+            # Last resort: manual conversion
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"User conversion error: {convert_error}, user: {user.id}, {user.username}")
+            # Return a User schema manually constructed
+            return User(
+                id=user.id,
+                username=user.username,
+                email=user.email,
+                full_name=user.full_name,
+                mobile=user.mobile,
+                is_active=user.is_active,
+                is_admin=user.is_admin,
+                created_at=user.created_at,
+                updated_at=user.updated_at
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Log the actual error for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting current user: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"用户认证失败: {str(e)}"
+        )
 
 async def get_current_active_user(
     current_user: User = Depends(get_current_user)
@@ -67,28 +108,57 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ) -> Token:
     """用户登录"""
-    user_service = UserService(db)
-    user = await user_service.authenticate(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not await user_service.is_active(user):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="用户未激活"
-        )
+    import logging
+    logger = logging.getLogger(__name__)
     
-    # 创建访问令牌和刷新令牌
-    access_token = create_access_token(user.username)
-    refresh_token = create_refresh_token(user.username)
-    
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token
-    )
+    try:
+        logger.debug(f"Login attempt for username: {form_data.username}")
+        user_service = UserService(db)
+        
+        # 验证用户
+        user = await user_service.authenticate(form_data.username, form_data.password)
+        if not user:
+            logger.warning(f"Authentication failed for username: {form_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # 检查用户是否激活
+        is_active = await user_service.is_active(user)
+        if not is_active:
+            logger.warning(f"Inactive user attempted login: {form_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="用户未激活"
+            )
+        
+        # 创建访问令牌和刷新令牌
+        try:
+            access_token = create_access_token(user.username)
+            refresh_token = create_refresh_token(user.username)
+            logger.info(f"Login successful for username: {form_data.username}")
+        except Exception as token_error:
+            logger.error(f"Token creation error: {token_error}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="令牌创建失败"
+            )
+        
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Log the actual error for debugging
+        logger.error(f"Login error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"登录失败: {str(e)}"
+        )
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(

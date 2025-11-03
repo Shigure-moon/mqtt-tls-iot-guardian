@@ -146,14 +146,62 @@ async def get_audit_logs(
     current_user: User = Depends(get_current_active_user)
 ) -> List[SecurityAuditLog]:
     """获取审计日志"""
-    security_service = SecurityService(db)
-    logs = await security_service.get_audit_logs(
-        skip=skip, limit=limit,
-        log_type=log_type,
-        start_time=start_time,
-        end_time=end_time
-    )
-    return logs
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        security_service = SecurityService(db)
+        logs = await security_service.get_audit_logs(
+            skip=skip, limit=limit,
+            log_type=log_type,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        # 将SQLAlchemy模型转换为Pydantic schema
+        result = []
+        for log in logs:
+            try:
+                if hasattr(log, '__table__'):  # 检查是否是SQLAlchemy模型
+                    # 使用model_validate或手动转换
+                    try:
+                        result.append(SecurityAuditLog.model_validate(log))
+                    except Exception:
+                        # 如果自动转换失败，手动构建
+                        log_dict = {
+                            'id': log.id,
+                            'log_type': log.log_type,
+                            'action': log.action,
+                            'status': log.status if hasattr(log, 'status') else 'success',
+                            'target_type': log.target_type,
+                            'target_id': log.target_id,
+                            'details': log.details,
+                            'ip_address': str(log.ip_address) if log.ip_address else None,
+                            'user_agent': log.user_agent,
+                            'created_at': log.created_at
+                        }
+                        # 添加actor相关字段
+                        if hasattr(log, 'actor_id'):
+                            log_dict['actor_id'] = log.actor_id
+                        if hasattr(log, 'actor_type'):
+                            log_dict['actor_type'] = log.actor_type
+                        
+                        result.append(SecurityAuditLog(**log_dict))
+                else:
+                    result.append(log)
+            except Exception as e:
+                logger.warning(f"Error converting audit log: {e}, log: {log}")
+                continue
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting audit logs: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取审计日志失败: {str(e)}"
+        )
 
 # IP黑名单管理
 @router.post("/blacklist", response_model=BlacklistedIP)
@@ -196,14 +244,60 @@ async def get_security_stats(
     current_user: User = Depends(get_current_active_user)
 ) -> SecurityStats:
     """获取安全统计信息"""
-    security_service = SecurityService(db)
-    stats = await security_service.get_security_stats()
+    import logging
+    logger = logging.getLogger(__name__)
     
-    # 构造符合SecurityStats schema的响应
-    return SecurityStats(
-        total_events=stats["total_events"],
-        severity_distribution=stats["severity_distribution"],
-        recent_events=stats["recent_events"],
-        top_threats=[],  # TODO: 实现top_threats逻辑
-        active_blacklist_count=stats["active_blacklist_count"]
-    )
+    try:
+        security_service = SecurityService(db)
+        stats = await security_service.get_security_stats()
+        
+        # 将SQLAlchemy模型转换为Pydantic schema
+        recent_events = []
+        events_list = stats.get("recent_events", [])
+        
+        if events_list:
+            try:
+                from app.schemas.security import SecurityEvent
+                for event in events_list:
+                    try:
+                        # 如果是SQLAlchemy模型，转换为schema
+                        if hasattr(event, '__table__'):  # 检查是否是SQLAlchemy模型
+                            # 处理source_ip可能为None的情况
+                            event_dict = {
+                                'id': event.id,
+                                'event_type': event.event_type,
+                                'severity': event.severity,
+                                'source_ip': str(event.source_ip) if event.source_ip else None,
+                                'device_id': event.device_id,
+                                'description': event.description,
+                                'raw_data': event.raw_data,
+                                'handled': event.handled,
+                                'handler_id': event.handler_id,
+                                'handled_at': event.handled_at,
+                                'created_at': event.created_at
+                            }
+                            recent_events.append(SecurityEvent(**event_dict))
+                        else:
+                            recent_events.append(event)
+                    except Exception as conv_error:
+                        logger.warning(f"Error converting security event: {conv_error}, event: {event}")
+                        continue
+            except Exception as import_error:
+                logger.error(f"Error importing SecurityEvent schema: {import_error}")
+        
+        # 构造符合SecurityStats schema的响应
+        return SecurityStats(
+            total_events=stats.get("total_events", 0),
+            severity_distribution=stats.get("severity_distribution", {}),
+            recent_events=recent_events,
+            top_threats=[],  # TODO: 实现top_threats逻辑
+            active_blacklist_count=stats.get("active_blacklist_count", 0)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting security stats: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取安全统计信息失败: {str(e)}"
+        )

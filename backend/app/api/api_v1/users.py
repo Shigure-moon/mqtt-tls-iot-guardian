@@ -44,22 +44,30 @@ async def read_user_me(
     db: AsyncSession = Depends(get_db)
 ):
     """获取当前用户信息"""
-    # 构造返回对象
-    user_dict = {
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "full_name": current_user.full_name,
-        "mobile": current_user.mobile,
-        "is_active": current_user.is_active,
-        "is_admin": current_user.is_admin,
-        "created_at": current_user.created_at,
-        "updated_at": current_user.updated_at,
-        "last_login_at": current_user.last_login_at,
-        "roles": [],
-        "permissions": []
-    }
-    return UserWithPermissions(**user_dict)
+    try:
+        # 直接返回UserWithPermissions，Pydantic会自动处理
+        return UserWithPermissions(
+            id=current_user.id,
+            username=current_user.username,
+            email=current_user.email,
+            full_name=current_user.full_name,
+            mobile=current_user.mobile,
+            is_active=current_user.is_active,
+            is_admin=current_user.is_admin,
+            created_at=current_user.created_at,
+            updated_at=current_user.updated_at,
+            last_login_at=current_user.last_login_at,
+            roles=[],
+            permissions=[]
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error reading user me: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取用户信息失败: {str(e)}"
+        )
 
 @router.put("/me", response_model=UserResponse)
 async def update_user_me(

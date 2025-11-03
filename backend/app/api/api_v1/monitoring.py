@@ -42,15 +42,33 @@ async def get_device_metrics(
     current_user: User = Depends(get_current_active_user)
 ) -> List[DeviceMetrics]:
     """获取设备指标历史数据"""
-    monitoring_service = MonitoringService(db)
-    metrics = await monitoring_service.get_device_metrics(
-        device_id=device_id,
-        start_time=start_time or datetime.utcnow() - timedelta(hours=24),
-        end_time=end_time or datetime.utcnow(),
-        metric_type=metric_type,
-        limit=limit
-    )
-    return metrics
+    try:
+        # 转换为无时区的时间
+        def remove_timezone(dt: datetime) -> datetime:
+            if dt.tzinfo is not None:
+                return dt.replace(tzinfo=None)
+            return dt
+        
+        start = start_time if start_time is None else remove_timezone(start_time)
+        end = end_time if end_time is None else remove_timezone(end_time)
+        
+        monitoring_service = MonitoringService(db)
+        metrics = await monitoring_service.get_device_metrics(
+            device_id=device_id,
+            start_time=start or datetime.utcnow() - timedelta(hours=24),
+            end_time=end or datetime.utcnow(),
+            metric_type=metric_type,
+            limit=limit
+        )
+        return metrics
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting device metrics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取设备指标失败: {str(e)}"
+        )
 
 # 告警规则管理
 @router.post("/alert-rules", response_model=AlertRule)

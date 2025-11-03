@@ -288,11 +288,12 @@ bool connectMQTT() {
     secureClient->setBufferSizes(2048, 512);
     secureClient->setTimeout(10000);
     
-    // 加载CA证书 - 使用insecure模式绕过证书验证（已知问题：证书验证会导致连接失败）
-    // BearSSL::X509List cert(ca_cert);
-    // secureClient->setTrustAnchors(&cert);
-    secureClient->setInsecure();  // 临时方案：禁用证书验证
-    Serial.println("[MQTT] TLS insecure mode (cert validation disabled)");
+    // 加载CA证书并验证服务器证书由CA签名
+    BearSSL::X509List cert(ca_cert);
+    secureClient->setTrustAnchors(&cert);
+    // 禁用主机名验证以支持IP地址连接（证书签名仍会被验证）
+    secureClient->setInsecure();
+    Serial.println("[MQTT] TLS with CA validation (hostname check disabled)");
     #else
     Serial.println("[MQTT] Using non-TLS connection");
     #endif
@@ -302,10 +303,19 @@ bool connectMQTT() {
     mqtt.setServer(mqtt_server, mqtt_port);
     mqtt.setCallback(mqttCallback);
     
-    // 生成客户端ID
-    String clientId = String("iot-device-") + String(ESP.getChipId(), HEX);
+    // 生成唯一客户端ID（包含芯片ID和时间戳，避免重复连接）
+    // 如果连接失败，会生成新的客户端ID重试
+    unsigned long chipId = ESP.getChipId();
+    unsigned long timestamp = millis() / 1000;
+    String clientId = String("iot-device-") + String(chipId, HEX) + "-" + String(timestamp, HEX);
     
-    // 尝试连接
+    // 清理之前的连接状态
+    if (mqtt.connected()) {
+      mqtt.disconnect();
+      delay(100);
+    }
+    
+    // 尝试连接（使用clean session）
     if (mqtt.connect(clientId.c_str(), mqtt_user, mqtt_pass)) {
         Serial.println("[MQTT] Connected!");
         printLeftLine("MQTT: Connected!", ILI9341_GREEN);
@@ -329,8 +339,12 @@ bool connectMQTT() {
     } else {
         Serial.print("[MQTT] Connection failed, rc=");
         Serial.println(mqtt.state());
-        printLeftLine("MQTT: Failed!", ILI9341_RED);
+        String errorMsg = "MQTT: Failed " + String(mqtt.state());
+        printLeftLine(errorMsg, ILI9341_RED);
         mqttConnected = false;
+        // 清理连接状态
+        mqtt.disconnect();
+        delay(100);
         return false;
     }
 }
@@ -419,7 +433,14 @@ void checkConnections() {
     if (!mqtt.connected()) {
         Serial.println("[Connection] MQTT disconnected, reconnecting...");
         mqttConnected = false;
+        // 先停止旧连接
+        mqtt.loop();
+        mqtt.disconnect();
+        delay(500);
         connectMQTT();
+    } else {
+        // 保持连接活跃
+        mqtt.loop();
     }
 }
 

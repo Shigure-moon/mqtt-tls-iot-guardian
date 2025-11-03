@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, UUID4
 from enum import Enum
 
 class MetricType(str, Enum):
@@ -31,8 +31,8 @@ class AlertStatus(str, Enum):
 
 # 设备指标相关模式
 class DeviceMetricsBase(BaseModel):
-    device_id: str
-    metric_type: MetricType
+    device_id: UUID4  # 使用UUID4类型
+    metric_type: str  # 使用字符串而不是枚举，以支持任意指标类型
     metrics: Dict[str, Any]
 
 class DeviceMetricsCreate(DeviceMetricsBase):
@@ -43,13 +43,13 @@ class DeviceMetrics(DeviceMetricsBase):
     timestamp: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # 告警规则相关模式
 class AlertRuleBase(BaseModel):
     name: str
     description: Optional[str] = None
-    device_id: Optional[str] = None
+    device_id: Optional[UUID4] = None
     metric_type: MetricType
     metric_name: str
     condition: AlertCondition
@@ -90,11 +90,11 @@ class AlertRule(AlertRuleBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # 监控告警相关模式
 class MonitoringAlertBase(BaseModel):
-    device_id: str
+    device_id: UUID4
     rule_id: str
     metrics_id: str
     severity: AlertSeverity
@@ -105,12 +105,12 @@ class MonitoringAlert(MonitoringAlertBase):
     id: str
     created_at: datetime
     acknowledged_at: Optional[datetime] = None
-    acknowledged_by: Optional[str] = None
+    acknowledged_by: Optional[UUID4] = None
     resolved_at: Optional[datetime] = None
-    resolved_by: Optional[str] = None
+    resolved_by: Optional[UUID4] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # 系统状态相关模式
 class AlertSeverityDistribution(BaseModel):

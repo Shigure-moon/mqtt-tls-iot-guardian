@@ -48,48 +48,37 @@ mqtt-tls-iot-guardian/
 
 ### 启动步骤
 
-1. **启动数据库服务**
-   ```bash
-   docker compose up -d
-   ```
+**方式一：一键启动（最简单）**
 
-2. **初始化后端**
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   python scripts/init_admin.py  # 创建默认管理员账号
-   # 运行数据库迁移
-   alembic upgrade head
-   ```
+```bash
+# 1. 启动Docker服务
+./scripts/quick_start.sh
 
-3. **启动后端服务**
-   ```bash
-   # 方式1：使用启动脚本（推荐）
-   ./scripts/start_backend.sh
-   
-   # 方式2：手动启动
-   cd backend
-   python main.py
-   ```
-   > 后端将在 http://localhost:8000 运行，API文档: http://localhost:8000/docs
+# 2. 启动后端（新终端）
+./scripts/start_backend.sh
 
-4. **启动前端服务**
-   ```bash
-   # 方式1：使用启动脚本（推荐）
-   ./scripts/start_frontend.sh
-   
-   # 方式2：手动启动
-   cd frontend
-   npm install
-   npm run dev
-   ```
-   > 前端将在 http://localhost:5173 运行
+# 3. 启动前端（新终端）
+./scripts/start_frontend.sh
+```
 
-5. **烧录设备端代码**
-   - 查看设备端烧录指南: `device/esp8266/README.md`
-   - 使用Arduino IDE打开 `device/esp8266/iot_guardian_device.ino`
-   - 配置WiFi和MQTT信息
-   - 编译并烧录到ESP8266设备
+**方式二：手动启动**
+
+详细说明请查看 [启动脚本文档](scripts/README.md)
+
+### ESP8266设备配置
+
+烧录设备端代码：
+
+1. 使用Arduino IDE打开 `device/esp8266/iot_guardian_device.ino`
+2. 配置WiFi信息（SSID和密码）
+3. 配置MQTT服务器地址
+4. 编译并烧录到ESP8266设备
+
+**当前配置**（TLS加密模式）：
+- **WiFi SSID**: `huawei9930`
+- **MQTT服务器**: `192.168.1.8`
+- **MQTT端口**: `8883` (TLS加密)
+- **TLS已启用**: `USE_TLS true`
 
 ### 默认账号
 - **用户名**: `admin`
@@ -129,16 +118,23 @@ ipconfig
 ## 项目进度
 详细进度请查看 `docs/PROJECT_STATUS.md`
 
-当前完成度：**约 40-45%**
+当前完成度：**约 95%**
 
 ### 已完成功能
 ✅ 用户认证授权  
 ✅ 设备管理（后端+前端）  
 ✅ TLS证书管理  
-✅ MQTT通信配置  
+✅ MQTT通信配置（TLS加密）  
+✅ 实时数据采集与存储  
+✅ 前端监控界面（Vue3 + ECharts）  
+✅ 自动刷新与数据可视化  
 ✅ 监控告警框架  
+✅ 设备详情页面  
+✅ Docker容器化部署  
+✅ 启动脚本自动化  
 
 ### 主要文档
+- 📖 [启动脚本说明](scripts/README.md) - **重要！首先阅读**
 - [项目计划](docs/PROJECT_PLAN.md)
 - [架构设计](docs/ARCHITECTURE.md)
 - [API设计](docs/API_DESIGN.md)
@@ -147,3 +143,25 @@ ipconfig
 - [部署文档](docs/DEPLOYMENT.md)
 - [安全设计](docs/SECURITY_DESIGN.md)
 - [项目状态](docs/PROJECT_STATUS.md)
+
+## 快速命令参考
+
+```bash
+# 启动所有Docker服务
+./scripts/quick_start.sh
+
+# 启动后端服务
+./scripts/start_backend.sh
+
+# 启动前端服务
+./scripts/start_frontend.sh
+
+# 停止所有服务
+docker compose down
+
+# 查看服务日志
+docker compose logs -f mosquitto
+
+# 查看MQTT连接
+docker compose logs mosquitto | grep "New client"
+```

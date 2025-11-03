@@ -55,13 +55,21 @@ echo ""
 echo "🔍 检查MQTT连接..."
 if docker compose ps mosquitto 2>/dev/null | grep -q "Up.*healthy"; then
     echo "✅ Mosquitto 已启动 (healthy)"
-    # 尝试连接测试
+    # 尝试连接测试非TLS端口
     if timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/1883' 2>/dev/null; then
         exec 3>&-
         exec 3<&-
-        echo "✅ Mosquitto 端口1883可连接"
+        echo "✅ Mosquitto 非TLS端口 1883 可连接"
     else
         echo "⚠️  Mosquitto 运行中但端口1883未响应"
+    fi
+    # 检查TLS端口
+    if timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/8883' 2>/dev/null; then
+        exec 3>&-
+        exec 3<&-
+        echo "✅ Mosquitto TLS端口 8883 可连接"
+    else
+        echo "⚠️  Mosquitto 运行中但TLS端口8883未响应"
     fi
 elif docker compose ps mosquitto 2>/dev/null | grep -q "Up"; then
     echo "✅ Mosquitto 已启动"
@@ -109,9 +117,15 @@ echo "🚀 启动后端服务..."
 echo "   服务将在 http://localhost:8000 运行"
 echo "   API文档可在 http://localhost:8000/docs 访问"
 echo ""
+echo "   MQTT监听主题："
+echo "   - devices/+/status"
+echo "   - devices/+/data"
+echo "   - devices/+/sensor"
+echo "   - devices/+/heartbeat"
+echo ""
 echo "   按 Ctrl+C 停止服务"
 echo ""
 
 cd "$BACKEND_DIR"
-python main.py
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 

@@ -54,14 +54,25 @@ async def get_device(
     current_user: User = Depends(get_current_active_user)
 ) -> Device:
     """获取设备详情"""
-    device_service = DeviceService(db)
-    device = await device_service.get_by_id(device_id)
-    if not device:
+    try:
+        device_service = DeviceService(db)
+        device = await device_service.get_by_id(device_id)
+        if not device:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="设备不存在"
+            )
+        return device
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error getting device {device_id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="设备不存在"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取设备信息失败: {str(e)}"
         )
-    return device
 
 @router.put("/{device_id}", response_model=Device)
 async def update_device(

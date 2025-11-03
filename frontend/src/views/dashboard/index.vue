@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, markRaw } from 'vue'
 import { Monitor, Connection, Warning, Check } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
@@ -69,10 +69,10 @@ interface Device {
 }
 
 const stats = ref([
-  { title: '总设备数', value: '0', icon: Monitor, color: '#409eff' },
-  { title: '在线设备', value: '0', icon: Connection, color: '#67c23a' },
-  { title: '安全事件', value: '0', icon: Warning, color: '#f56c6c' },
-  { title: '系统健康度', value: '100%', icon: Check, color: '#67c23a' },
+  { title: '总设备数', value: '0', icon: markRaw(Monitor), color: '#409eff' },
+  { title: '在线设备', value: '0', icon: markRaw(Connection), color: '#67c23a' },
+  { title: '安全事件', value: '0', icon: markRaw(Warning), color: '#f56c6c' },
+  { title: '系统健康度', value: '100%', icon: markRaw(Check), color: '#67c23a' },
 ])
 
 const activities = ref<Array<{ time: string; content: string }>>([])

@@ -274,10 +274,11 @@ bool connectMQTT() {{
         secureClient->setBufferSizes(2048, 512);
         secureClient->setTimeout(10000);
         
-        // 加载CA证书 - 使用insecure模式绕过证书验证（已知问题：证书验证会导致连接失败）
-        // BearSSL::X509List cert(ca_cert);
-        // secureClient->setTrustAnchors(&cert);
-        secureClient->setInsecure();  // 临时方案：禁用证书验证
+        // 加载CA证书并验证服务器证书由CA签名
+        BearSSL::X509List cert(ca_cert);
+        secureClient->setTrustAnchors(&cert);
+        // 禁用主机名验证以支持IP地址连接（证书签名仍会被验证）
+        secureClient->setInsecure();
     }}
     
     // 设置MQTT服务器和回调

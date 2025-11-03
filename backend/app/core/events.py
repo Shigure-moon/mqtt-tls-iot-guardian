@@ -6,6 +6,8 @@ from app.core.database import AsyncSessionLocal
 from app.services.device import DeviceService
 import redis.asyncio as redis
 import logging
+from queue import Queue
+import threading
 
 # 初始化日志
 logger = logging.getLogger(__name__)
@@ -15,6 +17,9 @@ mqtt = None
 
 # Redis客户端
 redis_client = None
+
+# MQTT消息队列
+mqtt_message_queue = Queue()
 
 async def startup_handler():
     """应用启动时的处理函数"""
@@ -27,6 +32,8 @@ async def startup_handler():
     
     try:
         await init_mqtt()
+        # 启动MQTT消息处理线程
+        start_mqtt_message_processor()
     except Exception as e:
         logger.warning(f"MQTT connection failed, continuing without MQTT: {e}")
         logger.warning("MQTT features will be unavailable until broker is configured")
@@ -77,13 +84,8 @@ async def init_mqtt():
     
     def on_message(client, userdata, msg):
         logger.info(f"Received message on topic: {msg.topic}")
-        # MQTT消息处理 - 使用队列而非直接处理
-        try:
-            # 简单记录，不立即处理数据库操作
-            # TODO: 使用消息队列异步处理
-            pass
-        except Exception as e:
-            logger.error(f"Error handling MQTT message: {e}")
+        # 将消息添加到队列，由专门的处理线程处理
+        mqtt_message_queue.put(msg)
     
     mqtt = mqtt_client.Client(client_id=settings.MQTT_CLIENT_ID, protocol=mqtt_client.MQTTv5)
     mqtt.username_pw_set(settings.MQTT_USERNAME, settings.MQTT_PASSWORD)
@@ -98,6 +100,29 @@ async def init_mqtt():
         logger.error(f"MQTT connection failed: {e}")
         mqtt = None
         raise
+
+def mqtt_message_processor():
+    """MQTT消息处理线程"""
+    import queue
+    while True:
+        try:
+            message = mqtt_message_queue.get(timeout=1)
+            # 在新事件循环中处理
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(handle_mqtt_message(message))
+            loop.close()
+        except queue.Empty:
+            # 超时是正常的，继续轮询
+            pass
+        except Exception as e:
+            logger.error(f"Error in message processor: {e}")
+    
+def start_mqtt_message_processor():
+    """启动MQTT消息处理线程"""
+    thread = threading.Thread(target=mqtt_message_processor, daemon=True)
+    thread.start()
+    logger.info("MQTT message processor thread started")
 
 async def handle_mqtt_message(message):
     """处理MQTT消息"""
@@ -121,6 +146,43 @@ async def handle_mqtt_message(message):
                     if device:
                         await device_service.update_status(device, "online")
                         logger.info(f"Device {device_id} status updated to online")
+                        
+                        # 如果是传感器数据，保存到监控表
+                        if message_type == 'sensor':
+                            try:
+                                from app.models.monitoring import DeviceMetrics
+                                from datetime import datetime
+                                import uuid
+                                
+                                # 解析JSON数据
+                                sensor_data = json.loads(payload) if payload else {}
+                                
+                                # 提取温度、湿度等指标
+                                metrics = {}
+                                if 'temperature' in sensor_data:
+                                    metrics['temperature'] = sensor_data['temperature']
+                                if 'humidity' in sensor_data:
+                                    metrics['humidity'] = sensor_data['humidity']
+                                if 'air_quality' in sensor_data:
+                                    metrics['air_quality'] = sensor_data['air_quality']
+                                if 'battery' in sensor_data:
+                                    metrics['battery'] = sensor_data['battery']
+                                
+                                # 保存每种指标的记录
+                                for metric_name, metric_value in metrics.items():
+                                    metric_record = DeviceMetrics(
+                                        device_id=device.id,
+                                        metric_type=metric_name,
+                                        metrics={'value': metric_value},
+                                        timestamp=datetime.utcnow()
+                                    )
+                                    db.add(metric_record)
+                                
+                                await db.commit()
+                                logger.info(f"Saved sensor metrics for device {device_id}: {metrics}")
+                            except Exception as e:
+                                logger.error(f"Error saving sensor metrics: {e}")
+                                await db.rollback()
                     else:
                         logger.warning(f"Device {device_id} not found in database")
     except Exception as e:
