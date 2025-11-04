@@ -100,15 +100,17 @@ npm run dev
 
 ```env
 # 数据库配置
+# Docker容器端口映射: 5434:5432
 DB_HOST=localhost
-DB_PORT=5433
+DB_PORT=5434
 DB_NAME=iot_security
 DB_USER=postgres
 DB_PASSWORD=password
 
 # Redis配置
+# Docker容器端口映射: 6381:6379
 REDIS_HOST=localhost
-REDIS_PORT=6380
+REDIS_PORT=6381
 REDIS_DB=0
 
 # MQTT配置

@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import text
 from app.core.config import settings
+from fastapi import HTTPException
 import logging
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,10 @@ async def get_db():
             yield session
             # 请求成功，提交事务
             await session.commit()
+        except HTTPException:
+            # HTTPException是预期的业务异常，不应该回滚或记录为数据库错误
+            # 直接向上传播，让FastAPI处理
+            raise
         except Exception as e:
             # 发生错误，回滚事务
             await session.rollback()

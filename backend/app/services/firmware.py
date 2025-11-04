@@ -518,13 +518,16 @@ void loop() {{
 '''
     
     @staticmethod
-    def generate_firmware_code(
+    async def generate_firmware_code(
         device_id: str,
         device_name: str,
+        device_type: str,
         wifi_ssid: str,
         wifi_password: str,
         mqtt_server: str,
-        ca_cert: Optional[str] = None
+        ca_cert: Optional[str] = None,
+        template_id: Optional[str] = None,
+        db: Optional[any] = None
     ) -> str:
         """
         生成Arduino固件代码
@@ -532,29 +535,76 @@ void loop() {{
         Args:
             device_id: 设备ID
             device_name: 设备名称
+            device_type: 设备类型（如：ESP8266）
             wifi_ssid: WiFi SSID
             wifi_password: WiFi密码
             mqtt_server: MQTT服务器地址
             ca_cert: CA证书内容（如果启用TLS）
+            template_id: 模板ID（可选，如果提供则使用模板）
+            db: 数据库会话（可选，如果提供template_id则必需）
         
         Returns:
             Arduino代码字符串
         """
+        template_code = None
+        
+        # 如果提供了模板ID，尝试使用模板
+        if template_id and db:
+            try:
+                from app.services.template import TemplateService
+                template_service = TemplateService(db)
+                template = await template_service.get_by_id(template_id)
+                if template and template.is_active:
+                    template_code = template_service.decrypt_template_code(template)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"使用模板失败，使用默认模板: {e}")
+        
+        # 如果没有模板或使用模板失败，尝试根据设备类型查找模板
+        if not template_code and db and device_type:
+            try:
+                from app.services.template import TemplateService
+                template_service = TemplateService(db)
+                templates = await template_service.get_by_device_type(device_type)
+                if templates:
+                    # 使用第一个启用的模板
+                    template_code = template_service.decrypt_template_code(templates[0])
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"根据设备类型查找模板失败，使用默认模板: {e}")
+        
+        # 如果没有找到模板，使用默认模板
+        if not template_code:
+            template_code = FirmwareService.TEMPLATE
+        
         # 如果没有提供CA证书，使用占位符
         if not ca_cert:
             ca_cert = "// TLS证书未配置，请在 USE_TLS 中禁用TLS或提供CA证书"
         
-        # 替换模板中的占位符
-        firmware_code = FirmwareService.TEMPLATE.format(
-            device_id=device_id,
-            device_name=device_name,
-            wifi_ssid=wifi_ssid,
-            wifi_password=wifi_password,
-            mqtt_server=mqtt_server,
-            mqtt_username=settings.MQTT_USERNAME,
-            mqtt_password=settings.MQTT_PASSWORD,
-            ca_cert=ca_cert
-        )
+        # 使用正则表达式安全地替换模板中的占位符
+        # 这样可以避免与代码中的大括号（如数组初始化、JSON等）冲突
+        import re
+        
+        # 定义占位符映射
+        replacements = {
+            '{device_id}': device_id,
+            '{device_name}': device_name,
+            '{wifi_ssid}': wifi_ssid,
+            '{wifi_password}': wifi_password,
+            '{mqtt_server}': mqtt_server,
+            '{mqtt_username}': settings.MQTT_USERNAME,
+            '{mqtt_password}': settings.MQTT_PASSWORD,
+            '{ca_cert}': ca_cert
+        }
+        
+        # 逐个替换占位符
+        firmware_code = template_code
+        for placeholder, value in replacements.items():
+            # 使用正则表达式替换，确保只替换完整的占位符
+            # 使用 word boundary 或者直接匹配，避免部分匹配
+            firmware_code = firmware_code.replace(placeholder, value)
         
         return firmware_code
     

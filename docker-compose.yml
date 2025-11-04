@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - "5433:5432"
+      - "5434:5432"  # 改为5434避免与系统PostgreSQL冲突
     volumes:
       - iot_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: redis:latest
     container_name: iot_redis
     ports:
-      - "6380:6379"
+      - "6381:6379"  # 改为6381避免与系统Redis冲突
     volumes:
       - iot_redis_data:/data
     command: redis-server --appendonly yes

@@ -49,5 +49,6 @@ export const STORAGE_KEYS = {
   TOKEN: 'token',
   REFRESH_TOKEN: 'refresh_token',
   USER_INFO: 'user_info',
+  SERVER_CERT_INFO: 'server_cert_info',
 }
 

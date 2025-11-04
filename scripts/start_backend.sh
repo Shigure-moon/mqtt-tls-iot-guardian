@@ -18,10 +18,11 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-# 启动Docker服务（数据库、Redis、MQTT）
+# 启动Docker服务（数据库、Redis，排除MQTT，使用系统上的Mosquitto）
 echo ""
-echo "📦 启动Docker服务（PostgreSQL、Redis、MQTT）..."
-docker compose up -d
+echo "📦 启动Docker服务（PostgreSQL、Redis）..."
+# 只启动postgres和redis服务，排除mosquitto
+docker compose up -d postgres redis
 
 echo ""
 echo "⏳ 等待服务启动..."
@@ -50,11 +51,11 @@ else
     echo "❌ Redis 未就绪"
 fi
 
-# 检查MQTT连接
+# 检查本地Mosquitto服务（系统服务，非容器）
 echo ""
-echo "🔍 检查MQTT连接..."
-if docker compose ps mosquitto 2>/dev/null | grep -q "Up.*healthy"; then
-    echo "✅ Mosquitto 已启动 (healthy)"
+echo "🔍 检查本地Mosquitto服务..."
+if systemctl is-active --quiet mosquitto 2>/dev/null || pgrep -x mosquitto > /dev/null; then
+    echo "✅ 本地Mosquitto服务正在运行"
     # 尝试连接测试非TLS端口
     if timeout 3 bash -c 'exec 3<>/dev/tcp/127.0.0.1/1883' 2>/dev/null; then
         exec 3>&-
@@ -70,12 +71,13 @@ if docker compose ps mosquitto 2>/dev/null | grep -q "Up.*healthy"; then
         echo "✅ Mosquitto TLS端口 8883 可连接"
     else
         echo "⚠️  Mosquitto 运行中但TLS端口8883未响应"
+        echo "   请检查Mosquitto TLS配置和证书"
     fi
-elif docker compose ps mosquitto 2>/dev/null | grep -q "Up"; then
-    echo "✅ Mosquitto 已启动"
 else
-    echo "⚠️  Mosquitto 未运行"
-    echo "   查看日志: docker compose logs mosquitto"
+    echo "⚠️  本地Mosquitto服务未运行"
+    echo "   启动服务: sudo systemctl start mosquitto"
+    echo "   查看状态: sudo systemctl status mosquitto"
+    echo "   查看日志: sudo journalctl -u mosquitto -f"
 fi
 
 # 获取backend目录（绝对路径）

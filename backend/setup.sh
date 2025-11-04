@@ -19,15 +19,17 @@ if [ ! -f .env ]; then
     echo "创建环境变量文件..."
     cat > .env << EOF
 # 数据库配置
+# 注意：Docker容器端口映射为 5434:5432，所以使用 5434
 DB_HOST=localhost
-DB_PORT=5432
+DB_PORT=5434
 DB_NAME=iot_security
 DB_USER=postgres
 DB_PASSWORD=password
 
 # Redis配置
+# 注意：Docker容器端口映射为 6381:6379，所以使用 6381
 REDIS_HOST=localhost
-REDIS_PORT=6379
+REDIS_PORT=6381
 REDIS_DB=0
 
 # MQTT配置

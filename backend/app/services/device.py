@@ -63,6 +63,7 @@ class DeviceService:
         device.status = status
         if status == "online":
             device.last_online_at = datetime.utcnow()
+        # 注意：当状态变为offline时，不更新last_online_at，保留最后在线时间
         
         self.db.add(device)
         await self.db.commit()
@@ -70,15 +71,52 @@ class DeviceService:
         return device
 
     async def add_certificate(self, device: Device, cert_in: DeviceCertificateCreate) -> DeviceCertificate:
-        """添加设备证书"""
+        """添加设备证书（加密存储）"""
+        from app.core.encryption import encrypt_certificate_data
+        
+        # 加密证书和私钥
+        encrypted_cert = encrypt_certificate_data(cert_in.certificate)
+        encrypted_private_key = None
+        if cert_in.private_key:
+            encrypted_private_key = encrypt_certificate_data(cert_in.private_key)
+        
+        # 检查序列号是否已存在（如果存在，记录警告但继续）
+        from sqlalchemy import select
+        existing = await self.db.execute(
+            select(DeviceCertificate)
+            .filter(DeviceCertificate.serial_number == cert_in.serial_number)
+        )
+        if existing.scalar_one_or_none():
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"证书序列号 {cert_in.serial_number} 已存在，但继续创建新证书")
+            # 注意：如果数据库有唯一约束，这里会抛出异常
+        
+        # 创建证书对象，使用加密后的数据
         cert = DeviceCertificate(
             device_id=device.id,
-            **cert_in.model_dump()
+            certificate=encrypted_cert,
+            private_key=encrypted_private_key,
+            certificate_type=cert_in.certificate_type,
+            serial_number=cert_in.serial_number,
+            issued_at=cert_in.issued_at,
+            expires_at=cert_in.expires_at
         )
         self.db.add(cert)
-        await self.db.commit()
-        await self.db.refresh(cert)
-        return cert
+        try:
+            await self.db.commit()
+            await self.db.refresh(cert)
+            return cert
+        except Exception as e:
+            await self.db.rollback()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"保存证书到数据库失败: {e}", exc_info=True)
+            # 检查是否是唯一约束冲突
+            error_str = str(e).lower()
+            if 'unique' in error_str or 'duplicate' in error_str:
+                raise ValueError(f"证书序列号 {cert_in.serial_number} 已存在，请重新生成证书")
+            raise
 
     async def revoke_certificate(self, cert: DeviceCertificate, reason: str) -> DeviceCertificate:
         """吊销设备证书"""

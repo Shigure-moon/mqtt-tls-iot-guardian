@@ -1,7 +1,7 @@
 from fastapi import APIRouter
-from app.api.api_v1 import auth, devices, security, monitoring, certificates
+from app.api.api_v1 import auth, devices, security, monitoring, certificates, templates
 
-from . import users
+from . import users, firmware_encryption
 
 api_router = APIRouter()
 
@@ -11,3 +11,5 @@ api_router.include_router(devices.router, prefix="/devices", tags=["设备管理
 api_router.include_router(security.router, prefix="/security", tags=["安全管理"])
 api_router.include_router(monitoring.router, prefix="/monitoring", tags=["监控管理"])
 api_router.include_router(certificates.router, prefix="/certificates", tags=["证书管理"])
+api_router.include_router(templates.router, prefix="/templates", tags=["模板管理"])
+api_router.include_router(firmware_encryption.router, prefix="/firmware", tags=["固件加密烧录"])

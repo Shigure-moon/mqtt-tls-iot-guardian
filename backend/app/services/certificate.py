@@ -17,9 +17,71 @@ import uuid
 from app.core.config import settings
 
 # 证书存储目录
-CERT_DIR = Path("data/certs")
-CERT_DIR.mkdir(parents=True, exist_ok=True)
+# 使用绝对路径，基于项目根目录
+# 方法：从backend目录向上找到项目根目录（包含data目录的目录）
+import os
+import logging
 
+logger = logging.getLogger(__name__)
+
+# 获取backend目录（当前文件所在目录的父目录的父目录）
+try:
+    _file_path = Path(__file__).resolve()
+    # backend/app/services/certificate.py -> backend
+    BACKEND_DIR = _file_path.parent.parent.parent
+except NameError:
+    # 如果__file__不存在，使用当前工作目录
+    BACKEND_DIR = Path.cwd()
+
+# 项目根目录：backend的父目录
+PROJECT_ROOT = BACKEND_DIR.parent
+
+# 尝试多个可能的证书目录位置
+possible_cert_dirs = [
+    PROJECT_ROOT / "data" / "certs",  # 项目根目录/data/certs
+    BACKEND_DIR / "data" / "certs",   # backend/data/certs（向后兼容）
+    Path("/home/shigure/mqtt-tls-iot-guardian/data/certs"),  # 硬编码路径（备用）
+]
+
+CERT_DIR = None
+for cert_dir in possible_cert_dirs:
+    if cert_dir.exists() or cert_dir.parent.exists():
+        CERT_DIR = cert_dir
+        break
+
+# 如果都找不到，使用项目根目录下的data/certs
+if CERT_DIR is None:
+    CERT_DIR = PROJECT_ROOT / "data" / "certs"
+
+# 创建目录，确保有写权限
+try:
+    CERT_DIR.mkdir(parents=True, exist_ok=True)
+    # 确保目录有写权限
+    if not os.access(CERT_DIR, os.W_OK):
+        logger.warning(f"证书目录 {CERT_DIR} 没有写权限，尝试修复权限...")
+        # 尝试修复权限（如果可能）
+        try:
+            import stat
+            current_mode = os.stat(CERT_DIR).st_mode
+            os.chmod(CERT_DIR, current_mode | stat.S_IWUSR | stat.S_IWGRP)
+            logger.info(f"已修复证书目录权限: {CERT_DIR}")
+        except PermissionError:
+            logger.warning(f"无法修复证书目录权限，请手动设置: sudo chmod 755 {CERT_DIR}")
+            # 尝试使用backend/data/certs作为备用
+            backup_cert_dir = BACKEND_DIR / "data" / "certs"
+            if backup_cert_dir.exists() or backup_cert_dir.parent.exists():
+                backup_cert_dir.mkdir(parents=True, exist_ok=True)
+                if os.access(backup_cert_dir, os.W_OK):
+                    logger.info(f"使用备用证书目录: {backup_cert_dir}")
+                    CERT_DIR = backup_cert_dir
+except Exception as e:
+    logger.error(f"创建证书目录失败: {e}")
+    # 使用backend/data/certs作为备用
+    CERT_DIR = BACKEND_DIR / "data" / "certs"
+    CERT_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"使用备用证书目录: {CERT_DIR}")
+
+# 定义证书文件路径（在CERT_DIR确定后）
 CA_KEY_PATH = CERT_DIR / "ca.key"
 CA_CERT_PATH = CERT_DIR / "ca.crt"
 SERVER_KEY_PATH = CERT_DIR / "server.key"
@@ -57,9 +119,16 @@ class CertificateService:
     @staticmethod
     def _load_or_create_ca_cert():
         """加载或创建CA证书"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if CA_CERT_PATH.exists():
-            with open(CA_CERT_PATH, "rb") as f:
-                return x509.load_pem_x509_certificate(f.read(), default_backend())
+            try:
+                with open(CA_CERT_PATH, "rb") as f:
+                    return x509.load_pem_x509_certificate(f.read(), default_backend())
+            except Exception as e:
+                logger.error(f"加载CA证书失败: {e}", exc_info=True)
+                raise ValueError(f"无法加载CA证书: {str(e)}")
         else:
             # 创建自签名CA证书
             ca_key = CertificateService._load_or_create_ca_key()
@@ -147,9 +216,16 @@ class CertificateService:
         
         返回: (server_key_pem, server_cert_pem)
         """
-        # 加载CA证书和私钥
-        ca_key = CertificateService._load_or_create_ca_key()
-        ca_cert = CertificateService._load_or_create_ca_cert()
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # 加载CA证书和私钥
+            ca_key = CertificateService._load_or_create_ca_key()
+            ca_cert = CertificateService._load_or_create_ca_cert()
+        except Exception as e:
+            logger.error(f"加载CA证书失败: {e}", exc_info=True)
+            raise ValueError(f"无法加载CA证书，请先生成CA证书: {str(e)}")
         
         # 生成服务器私钥
         server_key = rsa.generate_private_key(
@@ -243,11 +319,17 @@ class CertificateService:
         server_cert_pem = server_cert.public_bytes(serialization.Encoding.PEM).decode('utf-8')
         
         # 保存到文件
-        with open(SERVER_KEY_PATH, "w") as f:
-            f.write(server_key_pem)
-        
-        with open(SERVER_CERT_PATH, "w") as f:
-            f.write(server_cert_pem)
+        try:
+            with open(SERVER_KEY_PATH, "w") as f:
+                f.write(server_key_pem)
+            
+            with open(SERVER_CERT_PATH, "w") as f:
+                f.write(server_cert_pem)
+            logger.info(f"服务器证书已保存到: {SERVER_CERT_PATH}")
+        except Exception as e:
+            logger.error(f"保存服务器证书文件失败: {e}，路径: {SERVER_CERT_PATH}", exc_info=True)
+            # 即使保存失败，也返回证书内容
+            # 这样用户仍可以使用证书，只是没有保存到文件
         
         return server_key_pem, server_cert_pem
     

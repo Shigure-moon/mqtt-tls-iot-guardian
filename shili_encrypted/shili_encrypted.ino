@@ -1,319 +1,556 @@
 /**********************************************************************
- ESP8266 + ILI9341 + MQTT over TLS 演示
- - 展示WiFi连接 → TLS握手 → MQTT订阅/发布 → 收发展示
- - 需要：Adafruit_GFX, Adafruit_ILI9341, PubSubClient, ESP8266WiFi
-**********************************************************************/
+ * IoT安全管理系统 - ESP8266设备端（带屏幕显示）
+ * 
+ * 设备ID: esp8266
+ * 设备名称: esp8266
+ * 
+ * 功能：
+ * - WiFi连接
+ * - MQTT over TLS安全通信
+ * - ILI9341屏幕显示
+ * - 自动订阅设备主题
+ * - 发送心跳和传感器数据
+ * - 接收控制命令
+ * 
+ * 配置：
+ * - MQTT Broker: 192.168.1.8
+ * - 端口: 8883 (TLS)
+ * - 认证: 用户名密码 + TLS证书
+ * - 屏幕: ILI9341 TFT显示屏
+ * 
+ * 主题规范：
+ * - 设备状态: devices/esp8266/status
+ * - 传感器数据: devices/esp8266/sensor
+ * - 控制命令: devices/esp8266/control
+ * - 告警信息: devices/esp8266/alerts
+ * - 心跳: devices/esp8266/heartbeat
+ * 
+ * 所需库：
+ * - ESP8266WiFi
+ * - WiFiClientSecureBearSSL
+ * - PubSubClient
+ * - ArduinoJson
+ * - Adafruit_GFX
+ * - Adafruit_ILI9341
+ **********************************************************************/
 
-#include <ESP8266WiFi.h>
-#include <WiFiClientSecureBearSSL.h>
-#include <PubSubClient.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_ILI9341.h>
-
-// ====== 根据实际接线修改 ======
-#define TFT_CS D2
-#define TFT_RST D3
-#define TFT_DC D4
-Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);
-
-// ====== WiFi/MQTT配置（按需修改） ======
-const char *ssid = "huawei9930";
-const char *password = "993056494a.";
-const char *mqtt_server = "10.42.0.1"; // 本机IP
-const int mqtt_port = 8883;                 // TLS端口
-const char *mqtt_user = "xiaoxueqi";
-const char *mqtt_pass = "xiaoxueqi123";
-
-// 主题（示例）
-const char *topic_status = "robot/001/status";
-const char *topic_control = "robot/001/control";
-const char *topic_sensor = "robot/001/sensor";
-const char *topic_battery = "robot/001/battery";
-const char *topic_alerts = "robot/001/alerts";
-
-// CA证书（从 demo/backend/certs/ca.crt 拷贝内容放入此处，PEM格式）
-// 已更新为包含10.42.0.1 IP地址的证书
-static const char ca_cert[] PROGMEM = R"PEM(
------BEGIN CERTIFICATE-----
-MIIFqTCCA5GgAwIBAgIUbZ8tBJEnDzvtLb0GGG7+mqUGWbEwDQYJKoZIhvcNAQEL
-BQAwZDELMAkGA1UEBhMCQ04xDjAMBgNVBAgMBUxvY2FsMQ4wDAYDVQQHDAVMb2Nh
-bDEQMA4GA1UECgwHRGVtbyBDQTELMAkGA1UECwwCSVQxFjAUBgNVBAMMDURlbW8t
-TG9jYWwtQ0EwHhcNMjUxMDMxMDE1NTM4WhcNMzUxMDI5MDE1NTM4WjBkMQswCQYD
-VQQGEwJDTjEOMAwGA1UECAwFTG9jYWwxDjAMBgNVBAcMBUxvY2FsMRAwDgYDVQQK
-DAdEZW1vIENBMQswCQYDVQQLDAJJVDEWMBQGA1UEAwwNRGVtby1Mb2NhbC1DQTCC
-AiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBANXhXJiwXg8id27KmX/5mq03
-bQ0qYhIku3YscPk9l+Sylc65vuQgCyVS18OM8qBW/+hRsDfA2qzNgToOMbqeWg8Q
-sP4PjCZc8CMPfjzUYzygF++Rn7XhxpLQ6n0Jmh9T4H3MKzHNDXnVPOlX/Hxm1p5T
-Ooq0eaDd4HXslFMgh04hBUemL288+cCLf4c/ixKwQv3NECE68plmemNOmKEvd/fB
-zDWojrU49LRkh1PuqZ2+RQwRWocDcAQmMTqDmq3CeRc9Ootb+H0E7flT9FkykxwX
-44WCBtD3abEuAdLirbWlh8wPWReJiuO3QlfrZcTS1YY1riTFNoAvrr9H80QRUAJA
-oJAfGtS4a5iCF1pzGQYEV+61+jeBYBJ9YQzHP4F21gWYRwAg0lOx5u8PfqbYqMM+
-prRDEWRmSdkv+1zJ+PkSti0z8EeKIF6uMjyCIikpnBLtG6/KxIJj1thGiGx/1FzV
-K5PFVVwjlQ97WItWO+m0PlPKU/InNu0iJYeaeQl0gVHRoWCIBWVMzuXAlLCh44UK
-xUrxCxeMJqmcks1IheGD4sUigcrN7WaM2YfJ12S8cOrt8gSllDNs7h4hJXa0uok9
-WzE2iZdOf0pAFzx5NAQ+VA3SiMoIRCAOk9uTgXsHpmFrY/aMo5aFzc2WIbkGwZ6u
-Fi4VItmLMoW5uI3KgeaNAgMBAAGjUzBRMB0GA1UdDgQWBBROb7ImIYsG+gMZsEGQ
-+bi0FsUbrzAfBgNVHSMEGDAWgBROb7ImIYsG+gMZsEGQ+bi0FsUbrzAPBgNVHRMB
-Af8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQDVaXQ+jAiqozTNuqq6OncTDOf7
-R+QtwcHpzp8VxPFs7vEPqVhlOsv1/7X5bgoPeOnyUltQUafugFHmBQMU6XL/27zv
-JmNPg5tBw2eaTLzCh3jcAKBV/IwEXhmv1A8Musx3YU5iKBVJzMDXqQLt2scMeN3d
-g0qoa7Zznmzl2uRiG58UJg1uS6q1nX1m4ljJyptPywJhEuakHOXSE7Hue7ik0UYZ
-3WdJhVYZGy6B6sG18nbtmazllJexXMUrQH6dNm8De3rhYAeCo8ZLHefT3KsVpmna
-xJ5lCIorTJt8dasfkLc3t5pzKZwS0SIi6r2HjbI/o4dyypHSH52Fhs938UEQUAvK
-Cxyfg7EDpCpazrpNlJg3zYrs+sZMO9dECI97KGpQiqF3YLTOf3zjjizhOMJ+9ToO
-GazkNdp6srPnSb2zFmiAd/yoocWW0NhZlhvs3X9ws3w8Kk4ZPHvOwp/O4c4Ud2S3
-ICA6rL7xnBcOYYBTWewmacDuzd/fYUXCq/TmN6mQl77riynyvX+TviInmP86rLsY
-e0lrJqT4oCRWea0bu2gQyD5PfOlL3a3z6rHUoGatUV1rf60X2NhdBCvMOWq3Hn2v
-ImYXuNTL3RBdBsTznX0EYzAYdpZwT9wxwP5z8+kLia55pDlGMse/0lCDsBw3/+Qp
-72wWwQCR1Pgt/LRuYw==
------END CERTIFICATE-----
-)PEM";
-
-std::unique_ptr<BearSSL::WiFiClientSecure> secureClient(new BearSSL::WiFiClientSecure);
-PubSubClient mqtt(*secureClient);
-
-// ====== 屏幕布局（左：解密流程，右：传感器记录） ======
-// 固定布局：左侧宽 200px；右侧占余下宽度
-static const int16_t LEFT_PANE_X = 0;
-static const int16_t LEFT_PANE_W = 200;
-static const int16_t RIGHT_PANE_X = LEFT_PANE_W + 1;
-static int16_t RIGHT_PANE_W = 120; // 实际在 setup 中由屏幕宽度计算
-static const int16_t HEADER_H = 24;
-static const int16_t LINE_H = 10;
-
-// 动态游标
-static int16_t yLeft = HEADER_H + 2;
-static int16_t yRight = HEADER_H + 2;
-
-// 在指定pane打印一行，打印前清除该行，避免重叠
-void printLineInPane(int16_t x, int16_t &y, int16_t w, const String &text, uint16_t color)
-{
-  // 清除该行区域
-  tft.fillRect(x, y, w, LINE_H, ILI9341_BLACK);
-  // 打印
-  tft.setCursor(x + 2, y);
-  tft.setTextColor(color);
-  tft.setTextSize(1);
-  // 禁止自动换行，避免跨越到左侧
-  tft.setTextWrap(false);
-  // 依据列宽裁剪一行可显示的字符数（字体宽约6px）
-  int16_t maxChars = (w - 4) / 6;
-  String line = text;
-  if (maxChars > 0 && (int)text.length() > maxChars)
-  {
-    line = text.substring(0, maxChars - 1) + "~"; // 用~标记被截断
-  }
-  tft.print(line);
-  // 前进一行，滚屏
-  y += LINE_H;
-  int16_t maxH = tft.height();
-  if (y > maxH - LINE_H)
-  {
-    // 滚动：整体上移一个行高（通过区域重绘实现简易滚动）
-    // 复制区域代价高，这里采用清空并重置游标
-    tft.fillRect(x, HEADER_H + 2, w, maxH - HEADER_H - 2, ILI9341_BLACK);
-    y = HEADER_H + 2;
-  }
-}
-
-inline void printLeftLine(const String &s, uint16_t color = ILI9341_WHITE)
-{
-  printLineInPane(LEFT_PANE_X, yLeft, LEFT_PANE_W, s, color);
-}
-
-inline void printRightLine(const String &s, uint16_t color = ILI9341_YELLOW)
-{
-  printLineInPane(RIGHT_PANE_X, yRight, RIGHT_PANE_W, s, color);
-}
-
-// 绘制左右两个标题栏
-void drawHeaders()
-{
-  // 左标题
-  tft.fillRect(LEFT_PANE_X, 0, LEFT_PANE_W, HEADER_H, ILI9341_BLUE);
-  tft.setTextColor(ILI9341_WHITE);
-  tft.setTextSize(2);
-  tft.setCursor(LEFT_PANE_X + 4, 4);
-  tft.print("RX Flow");
-
-  // 右标题
-  tft.fillRect(RIGHT_PANE_X, 0, RIGHT_PANE_W, HEADER_H, ILI9341_DARKGREEN);
-  tft.setTextColor(ILI9341_WHITE);
-  tft.setTextSize(2);
-  tft.setCursor(RIGHT_PANE_X + 4, 4);
-  tft.print("Sensors");
-
-  // 中间分隔线（贯穿全屏）
-  tft.drawFastVLine(LEFT_PANE_W, 0, tft.height(), ILI9341_DARKGREY);
-}
-
-void onMqttMessage(char *topic, byte *payload, unsigned int length)
-{
-  // 左侧：解密流程演示
-  printLeftLine("[RX] Incoming message", ILI9341_CYAN);
-
-  // 显示HEX（最多16字节）
-  String encryptedHex = "";
-  for (unsigned int i = 0; i < min(length, (unsigned int)16); i++)
-  {
-    if (i) encryptedHex += " ";
-    uint8_t b = payload[i];
-    if (b < 16) encryptedHex += "0"; // 补零
-    encryptedHex += String(b, HEX);
-  }
-  if (length > 16) encryptedHex += " ...";
-  printLeftLine("Encrypted(hex): " + encryptedHex, ILI9341_MAGENTA);
-
-  // 模拟TLS流程
-  printLeftLine("TLS: handshake OK", ILI9341_YELLOW);
-  printLeftLine("TLS: verify cert OK", ILI9341_YELLOW);
-  printLeftLine("TLS: AES-GCM decrypt...", ILI9341_YELLOW);
-
-  // 明文
-  String msg;
-  for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-  printLeftLine("Plaintext: " + msg, ILI9341_GREEN);
-  printLeftLine("Topic: " + String(topic), ILI9341_WHITE);
-}
-
-bool mqttConnect()
-{
-  String clientId = String("esp8266-") + String(ESP.getChipId(), HEX);
-  logLine("Connecting to MQTT...", ILI9341_YELLOW);
-  logLine("Server: " + String(mqtt_server) + ":" + String(mqtt_port), ILI9341_WHITE);
-  
-  // 尝试连接
-  int state = mqtt.state();
-  logLine("Before connect state=" + String(state), ILI9341_WHITE);
-  
-  if (mqtt.connect(clientId.c_str(), mqtt_user, mqtt_pass))
-  {
-    logLine("MQTT connected", ILI9341_GREEN);
-    mqtt.subscribe(topic_control);
-    mqtt.subscribe(topic_alerts);
-    mqtt.publish(topic_status, "online");
-    return true;
-  }
-  else
-  {
-    int state = mqtt.state();
-    String errorMsg = "MQTT failed";
-    // PubSubClient 错误码
-    switch(state) {
-      case -4: errorMsg = "Connection timeout"; break;
-      case -3: errorMsg = "Connection lost"; break;
-      case -2: errorMsg = "Connect failed"; break;
-      case -1: errorMsg = "Disconnected"; break;
-      case 1: errorMsg = "Bad protocol"; break;
-      case 2: errorMsg = "Bad client ID"; break;
-      case 3: errorMsg = "Unavailable"; break;
-      case 4: errorMsg = "Bad credentials"; break;
-      case 5: errorMsg = "Unauthorized"; break;
-      default: errorMsg = "Unknown error"; break;
-    }
-    logLine(errorMsg + " code=" + String(state), ILI9341_RED);
-    Serial.println("[MQTT] Connection failed, state=" + String(state));
-    return false;
-  }
-}
-
-void setup()
-{
-  Serial.begin(115200);
-  tft.begin();
-  tft.setRotation(1);
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setTextWrap(false); // 全局关闭自动换行，避免跨栏
-
-  // 计算右侧宽度并绘制标题
-  RIGHT_PANE_W = tft.width() - RIGHT_PANE_X;
-  drawHeaders();
-
-  // 面板下方清空
-  tft.fillRect(LEFT_PANE_X, HEADER_H + 2, LEFT_PANE_W, tft.height() - HEADER_H - 2, ILI9341_BLACK);
-  tft.fillRect(RIGHT_PANE_X, HEADER_H + 2, RIGHT_PANE_W, tft.height() - HEADER_H - 2, ILI9341_BLACK);
-
-  // 提示
-  printLeftLine("WiFi: Connecting...", ILI9341_YELLOW);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  int retries = 0;
-  while (WiFi.status() != WL_CONNECTED && retries < 60)
-  {
-    delay(500);
-    printLeftLine(".", ILI9341_YELLOW);
-    retries++;
-  }
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    printLeftLine("WiFi failed - check SSID/password", ILI9341_RED);
-    return;
-  }
-  String ipMsg = String("IP acquired: ") + WiFi.localIP().toString();
-  printLeftLine("WiFi connected", ILI9341_GREEN);
-  printLeftLine(ipMsg, ILI9341_GREEN);
-  delay(800);
-
-  printLeftLine("TLS handshake", ILI9341_YELLOW);
-  printLeftLine("Load CA & verify server cert", ILI9341_YELLOW);
-  secureClient->setBufferSizes(4096, 512);
-  secureClient->setTimeout(15000);
-  BearSSL::X509List cert(ca_cert);
-  secureClient->setTrustAnchors(&cert);
-  // 可选：SNI 仅当使用域名连接时需要。当前使用IP无需设置。
-  // 对于IP地址连接，可能需要禁用证书主机名验证
-  secureClient->setInsecure(); // 仅用于测试，生产环境应启用验证
-
-  mqtt.setServer(mqtt_server, mqtt_port);
-  mqtt.setCallback(onMqttMessage);
-
-  if (!mqttConnect())
-  {
-    int state = mqtt.state();
-    String errorDesc = "State code=" + String(state);
-    if (state == -2) {
-      errorDesc = "TLS/Network error";
-    } else if (state == 4) {
-      errorDesc = "Bad username/password";
-    } else if (state == 5) {
-      errorDesc = "Not authorized";
-    }
-    printLeftLine("MQTT failed", ILI9341_RED);
-    printLeftLine(errorDesc, ILI9341_RED);
-    Serial.println("[ERROR] MQTT connection failed, state=" + String(state));
-    return;
-  }
-  printLeftLine("MQTT connected", ILI9341_GREEN);
-  printLeftLine("Subscribed control/alerts; published online", ILI9341_GREEN);
-}
-
-unsigned long lastPub = 0;
-
-void loop()
-{
-  if (WiFi.status() != WL_CONNECTED)
-    return;
-  if (!mqtt.connected())
-  {
-    if (!mqttConnect())
-    {
-      delay(2000);
-      return;
-    }
-  }
-  mqtt.loop();
-
-  // 周期上报模拟数据
-  unsigned long now = millis();
-  if (now - lastPub > 3000)
-  {
-    lastPub = now;
-    String sensor = String("{\"t\":") + String(now / 1000) + ",\"temp\":25.3}";
-    mqtt.publish(topic_sensor, sensor.c_str());
-    mqtt.publish(topic_battery, "{\"soc\":92}");
-    // 右侧面板滚动显示最新传感记录
-    printRightLine(String("t=") + String(now / 1000) + "s", ILI9341_CYAN);
-    printRightLine(String("sensor ") + sensor, ILI9341_YELLOW);
-  }
-}
+ #include <ESP8266WiFi.h>
+ #include <WiFiClientSecureBearSSL.h>
+ #include <PubSubClient.h>
+ #include <ArduinoJson.h>
+ #include <Adafruit_GFX.h>
+ #include <Adafruit_ILI9341.h>
+ 
+ // ====== 根据实际接线修改 ======
+ #define TFT_CS D2
+ #define TFT_RST D3
+ #define TFT_DC D4
+ Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);
+ 
+ // ====== 设备配置 ======
+ #define DEVICE_ID "esp8266"              // 设备唯一ID
+ #define DEVICE_NAME "esp8266"          // 设备名称（屏幕显示用）
+ 
+ // WiFi配置
+ const char* ssid = "huawei9930";            // WiFi网络名称
+ const char* password = "993056494a.";    // WiFi密码
+ 
+ // MQTT Broker配置
+ const char* mqtt_server = "10.42.0.1";   // MQTT服务器地址
+ const int mqtt_port = 8883;                  // TLS端口
+ const char* mqtt_user = "admin";   // MQTT用户名
+ const char* mqtt_pass = "admin";   // MQTT密码
+ 
+ // 使用TLS
+ #define USE_TLS true                         // 启用TLS
+ 
+ // CA证书（用于验证MQTT服务器证书）
+ static const char ca_cert[] PROGMEM = R"PEM(
+ -----BEGIN CERTIFICATE-----
+ MIIDjjCCAnagAwIBAgIUQ7JiWpxdHTbLU6gCSnC6KpY61HgwDQYJKoZIhvcNAQEL
+ BQAwYjELMAkGA1UEBhMCQ04xEDAOBgNVBAgMB0JlaWppbmcxEDAOBgNVBAcMB0Jl
+ aWppbmcxHjAcBgNVBAoMFUlvVCBTZWN1cml0eSBQbGF0Zm9ybTEPMA0GA1UEAwwG
+ SW9UIENBMB4XDTI1MTEwMzA1NTcyMloXDTM1MTEwMTA1NTcyMlowYjELMAkGA1UE
+ BhMCQ04xEDAOBgNVBAgMB0JlaWppbmcxEDAOBgNVBAcMB0JlaWppbmcxHjAcBgNV
+ BAoMFUlvVCBTZWN1cml0eSBQbGF0Zm9ybTEPMA0GA1UEAwwGSW9UIENBMIIBIjAN
+ BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3eLGZaSnN7+rcMILy8AS7jMDnAnm
+ pMXENqmFUkA7bIN+IGuwLdRTj9Zaw+l3EPSQG6U4WTwnVItwOk/DpezjHUJ48qdx
+ M2Mh/+UGFoRdQOUbswM+7Xrpc6sMMD9MhX+cOF2F9aszvaS9e/M1YY9ZYMbcur9x
+ 1uJfsFdEPKiMvHF9R/Cu5NGlHj1rg4jCTpLixtgB/4vtwD25I3P5NKeVhtYc8Xl7
+ JiFwJ5XXQjvtSSBR6RsiOa7qpEhmyk3bEec/hxUQ+rBJ+MvAAPyTCwozhQN1l6Yy
+ aOCr5Tug8uB9fD+lFd0+msosKTRQNcWOUrbsFcj1T+FlDPpoT0mNBHoHWwIDAQAB
+ ozwwOjAXBgNVHREEEDAOggxpb3QtY2EubG9jYWwwDwYDVR0TAQH/BAUwAwEB/zAO
+ BgNVHQ8BAf8EBAMCAYYwDQYJKoZIhvcNAQELBQADggEBAIrV1LCG9zbckevrzIU3
+ 6tfD+fpbMfPeptuV06FUv7X+gsobaySKaheQk5QOK9cpDbtxkJLfGk8SWKHhDU+H
+ K+GE1o7dY3YU0WOP2t0qN7kjG7DaqROH1KnsraHYMoSnBSnJ6EvFD+6zD5Mdb9Ax
+ 619Tj3snjU24Of6dYVUwxGVGGpvUQkghiBovSIB2iSbUq/fwfd2wBWOo7EM7shpV
+ 5mGpOsi/SqXxLmlw43ROJgJYYe8wqguLClvhrad96dDFd+L22BaHtdaxW5NcZfXe
+ P2QhrIz/oPuwDwPG37nluuVxb9RRP85XAGbUIkD99FKSCtnY6DbtkMrr0fhicsz5
+ ipY=
+ -----END CERTIFICATE-----
+ 
+ )PEM";
+ 
+ // MQTT主题
+ const char* topic_status = "devices/" DEVICE_ID "/status";
+ const char* topic_sensor = "devices/" DEVICE_ID "/sensor";
+ const char* topic_control = "devices/" DEVICE_ID "/control";
+ const char* topic_heartbeat = "devices/" DEVICE_ID "/heartbeat";
+ const char* topic_alerts = "devices/" DEVICE_ID "/alerts";
+ 
+ // MQTT客户端
+ #if USE_TLS
+ std::unique_ptr<BearSSL::WiFiClientSecure> secureClient(new BearSSL::WiFiClientSecure);
+ PubSubClient mqtt(*secureClient);
+ #else
+ WiFiClient wifiClient;
+ PubSubClient mqtt(wifiClient);
+ #endif
+ 
+ // ====== 屏幕布局（左：MQTT流程，右：传感器记录） ======
+ static const int16_t LEFT_PANE_X = 0;
+ static const int16_t LEFT_PANE_W = 200;
+ static const int16_t RIGHT_PANE_X = LEFT_PANE_W + 1;
+ static int16_t RIGHT_PANE_W = 120;
+ static const int16_t HEADER_H = 30;
+ static const int16_t LINE_H = 12;
+ 
+ // 动态游标
+ static int16_t yLeft = HEADER_H + 2;
+ static int16_t yRight = HEADER_H + 2;
+ 
+ // ====== 全局变量 ======
+ unsigned long lastHeartbeat = 0;
+ unsigned long lastSensorPub = 0;
+ const unsigned long HEARTBEAT_INTERVAL = 30000;  // 30秒心跳
+ const unsigned long SENSOR_INTERVAL = 10000;     // 10秒传感器数据
+ 
+ // 连接状态
+ bool wifiConnected = false;
+ bool mqttConnected = false;
+ 
+ #define SERIAL_BAUD 115200
+ 
+ /**********************************************************************
+  * 在指定pane打印一行，打印前清除该行，避免重叠
+  **********************************************************************/
+ void printLineInPane(int16_t x, int16_t &y, int16_t w, const String &text, uint16_t color) {
+     // 清除该行区域
+     tft.fillRect(x, y, w, LINE_H, ILI9341_BLACK);
+     // 打印
+     tft.setCursor(x + 2, y);
+     tft.setTextColor(color);
+     tft.setTextSize(1);
+     tft.setTextWrap(false);
+     // 依据列宽裁剪一行可显示的字符数（字体宽约6px）
+     int16_t maxChars = (w - 4) / 6;
+     String line = text;
+     if (maxChars > 0 && (int)text.length() > maxChars) {
+         line = text.substring(0, maxChars - 1) + "~";
+     }
+     tft.print(line);
+     // 前进一行，滚屏
+     y += LINE_H;
+     int16_t maxH = tft.height();
+     if (y > maxH - LINE_H) {
+         tft.fillRect(x, HEADER_H + 2, w, maxH - HEADER_H - 2, ILI9341_BLACK);
+         y = HEADER_H + 2;
+     }
+ }
+ 
+ inline void printLeftLine(const String &s, uint16_t color = ILI9341_WHITE) {
+     printLineInPane(LEFT_PANE_X, yLeft, LEFT_PANE_W, s, color);
+ }
+ 
+ inline void printRightLine(const String &s, uint16_t color = ILI9341_YELLOW) {
+     printLineInPane(RIGHT_PANE_X, yRight, RIGHT_PANE_W, s, color);
+ }
+ 
+ /**********************************************************************
+  * 绘制左右两个标题栏
+  **********************************************************************/
+ void drawHeaders() {
+     // 左标题 - MQTT连接状态
+     tft.fillRect(LEFT_PANE_X, 0, LEFT_PANE_W, HEADER_H, ILI9341_BLUE);
+     tft.setTextColor(ILI9341_WHITE);
+     tft.setTextSize(2);
+     tft.setCursor(LEFT_PANE_X + 4, 6);
+     tft.print("MQTT");
+ 
+     // 右标题 - 传感器数据
+     tft.fillRect(RIGHT_PANE_X, 0, RIGHT_PANE_W, HEADER_H, ILI9341_DARKGREEN);
+     tft.setTextColor(ILI9341_WHITE);
+     tft.setTextSize(2);
+     tft.setCursor(RIGHT_PANE_X + 4, 6);
+     tft.print("Data");
+ 
+     // 中间分隔线
+     tft.drawFastVLine(LEFT_PANE_W, 0, tft.height(), ILI9341_DARKGREY);
+ }
+ 
+ /**********************************************************************
+  * MQTT消息回调函数
+  **********************************************************************/
+ void mqttCallback(char* topic, byte* payload, unsigned int length) {
+     Serial.print("[MQTT] Received message on topic: ");
+     Serial.println(topic);
+     
+     // 左侧：显示接收到的消息
+     printLeftLine("[RX] Incoming msg", ILI9341_CYAN);
+     
+     // 显示HEX（最多16字节）
+     String encryptedHex = "";
+     for (unsigned int i = 0; i < min(length, (unsigned int)16); i++) {
+         if (i) encryptedHex += " ";
+         uint8_t b = payload[i];
+         if (b < 16) encryptedHex += "0";
+         encryptedHex += String(b, HEX);
+     }
+     if (length > 16) encryptedHex += " ...";
+     printLeftLine("Encrypted(hex):", ILI9341_MAGENTA);
+     printLeftLine(encryptedHex, ILI9341_MAGENTA);
+ 
+     // 模拟TLS流程
+     printLeftLine("TLS: handshake OK", ILI9341_YELLOW);
+     printLeftLine("TLS: verify cert OK", ILI9341_YELLOW);
+     printLeftLine("TLS: AES-GCM decrypt", ILI9341_YELLOW);
+ 
+     // 明文
+     String msg;
+     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
+     printLeftLine("Plaintext:", ILI9341_GREEN);
+     printLeftLine(msg, ILI9341_GREEN);
+     printLeftLine("Topic: " + String(topic), ILI9341_WHITE);
+     
+     // 简单的命令解析
+     if (strstr(msg.c_str(), "restart")) {
+         printLeftLine("CMD: Restarting...", ILI9341_RED);
+         ESP.restart();
+     } else if (strstr(msg.c_str(), "led_on")) {
+         printLeftLine("CMD: LED ON", ILI9341_GREEN);
+         digitalWrite(LED_BUILTIN, LOW);
+     } else if (strstr(msg.c_str(), "led_off")) {
+         printLeftLine("CMD: LED OFF", ILI9341_GREEN);
+         digitalWrite(LED_BUILTIN, HIGH);
+     }
+ }
+ 
+ /**********************************************************************
+  * 连接WiFi
+  **********************************************************************/
+ bool connectWiFi() {
+     Serial.print("[WiFi] Connecting to ");
+     Serial.println(ssid);
+     printLeftLine("WiFi: Connecting...", ILI9341_YELLOW);
+     
+     WiFi.mode(WIFI_STA);
+     WiFi.begin(ssid, password);
+     
+     int attempts = 0;
+     while (WiFi.status() != WL_CONNECTED && attempts < 60) {
+         delay(500);
+         Serial.print(".");
+         attempts++;
+     }
+     
+     if (WiFi.status() == WL_CONNECTED) {
+         Serial.println();
+         Serial.print("[WiFi] Connected! IP address: ");
+         Serial.println(WiFi.localIP());
+         String ipMsg = "WiFi: IP " + WiFi.localIP().toString();
+         printLeftLine("WiFi: Connected", ILI9341_GREEN);
+         printLeftLine(ipMsg, ILI9341_GREEN);
+         wifiConnected = true;
+         delay(500);
+         return true;
+     } else {
+         Serial.println();
+         Serial.println("[WiFi] Connection failed!");
+         printLeftLine("WiFi: Failed!", ILI9341_RED);
+         wifiConnected = false;
+         return false;
+     }
+ }
+ 
+ /**********************************************************************
+  * 连接MQTT
+  **********************************************************************/
+ bool connectMQTT() {
+     Serial.print("[MQTT] Connecting to ");
+     Serial.print(mqtt_server);
+     Serial.print(":");
+     Serial.println(mqtt_port);
+     printLeftLine("MQTT: Connecting...", ILI9341_YELLOW);
+     
+     // 如果使用TLS
+     #if USE_TLS
+     printLeftLine("TLS: Load CA cert", ILI9341_YELLOW);
+     secureClient->setBufferSizes(2048, 512);
+     secureClient->setTimeout(10000);
+     
+     // 加载CA证书并验证服务器证书由CA签名
+     BearSSL::X509List cert(ca_cert);
+     secureClient->setTrustAnchors(&cert);
+     // 禁用主机名验证以支持IP地址连接（证书签名仍会被验证）
+     secureClient->setInsecure();
+     Serial.println("[MQTT] TLS with CA validation (hostname check disabled)");
+     #else
+     Serial.println("[MQTT] Using non-TLS connection");
+     #endif
+     
+     // 设置MQTT服务器和回调
+     mqtt.setBufferSize(512);
+     mqtt.setServer(mqtt_server, mqtt_port);
+     mqtt.setCallback(mqttCallback);
+     
+     // 生成唯一客户端ID（包含芯片ID和时间戳，避免重复连接）
+     // 如果连接失败，会生成新的客户端ID重试
+     unsigned long chipId = ESP.getChipId();
+     unsigned long timestamp = millis() / 1000;
+     String clientId = String("iot-device-") + String(chipId, HEX) + "-" + String(timestamp, HEX);
+     
+     // 清理之前的连接状态
+     if (mqtt.connected()) {
+       mqtt.disconnect();
+       delay(100);
+     }
+     
+     // 尝试连接（使用clean session）
+     if (mqtt.connect(clientId.c_str(), mqtt_user, mqtt_pass)) {
+         Serial.println("[MQTT] Connected!");
+         printLeftLine("MQTT: Connected!", ILI9341_GREEN);
+         mqttConnected = true;
+         
+         // 订阅控制主题
+         mqtt.subscribe(topic_control);
+         printLeftLine("Sub: control", ILI9341_WHITE);
+         
+         // 订阅告警主题
+         mqtt.subscribe(topic_alerts);
+         printLeftLine("Sub: alerts", ILI9341_WHITE);
+         
+         // 发送上线消息
+         String onlineMsg = "{\"status\":\"online\",\"device_id\":\"" + String(DEVICE_ID) + "\"}";
+         mqtt.publish(topic_status, onlineMsg.c_str());
+         printLeftLine("Pub: online", ILI9341_GREEN);
+         
+         delay(500);
+         return true;
+     } else {
+         Serial.print("[MQTT] Connection failed, rc=");
+         Serial.println(mqtt.state());
+         String errorMsg = "MQTT: Failed " + String(mqtt.state());
+         printLeftLine(errorMsg, ILI9341_RED);
+         mqttConnected = false;
+         // 清理连接状态
+         mqtt.disconnect();
+         delay(100);
+         return false;
+     }
+ }
+ 
+ /**********************************************************************
+  * 发送心跳消息
+  **********************************************************************/
+ void sendHeartbeat() {
+     unsigned long now = millis();
+     if (now - lastHeartbeat >= HEARTBEAT_INTERVAL) {
+         lastHeartbeat = now;
+         
+         DynamicJsonDocument doc(256);
+         doc["device_id"] = DEVICE_ID;
+         doc["timestamp"] = now / 1000;
+         doc["uptime"] = now / 1000;
+         doc["heap"] = ESP.getFreeHeap();
+         doc["rssi"] = WiFi.RSSI();
+         
+         String message;
+         serializeJson(doc, message);
+         
+         if (mqtt.publish(topic_heartbeat, message.c_str())) {
+             Serial.println("[Heartbeat] Sent");
+         } else {
+             Serial.println("[Heartbeat] Failed");
+         }
+     }
+ }
+ 
+ /**********************************************************************
+  * 发送传感器数据
+  **********************************************************************/
+ void sendSensorData() {
+     unsigned long now = millis();
+     if (now - lastSensorPub >= SENSOR_INTERVAL) {
+         lastSensorPub = now;
+         
+         DynamicJsonDocument doc(512);
+         doc["device_id"] = DEVICE_ID;
+         doc["timestamp"] = now / 1000;
+         
+         // 模拟传感器数据
+         float temp = 25.5 + random(0, 100) / 10.0;
+         float humi = 60.0 + random(0, 200) / 10.0;
+         float volt = 3.3 + random(0, 10) / 100.0;
+         float batt = 85.0 + random(0, 200) / 10.0;
+         
+         doc["temperature"] = temp;
+         doc["humidity"] = humi;
+         doc["voltage"] = volt;
+         doc["battery"] = batt;
+         doc["status"]["wifi"] = wifiConnected ? "connected" : "disconnected";
+         doc["status"]["mqtt"] = mqttConnected ? "connected" : "disconnected";
+         doc["status"]["uptime"] = now / 1000;
+         
+         String message;
+         serializeJson(doc, message);
+         
+         if (mqtt.publish(topic_sensor, message.c_str())) {
+             Serial.println("[Sensor] Data sent");
+             
+             // 右侧面板显示传感器数据
+             printRightLine("t=" + String(now / 1000) + "s", ILI9341_CYAN);
+             printRightLine("Temp:" + String(temp, 1) + "C", ILI9341_YELLOW);
+             printRightLine("Hum:" + String(humi, 1) + "%", ILI9341_YELLOW);
+             printRightLine("Batt:" + String(batt, 1) + "%", ILI9341_GREEN);
+         } else {
+             Serial.println("[Sensor] Failed");
+         }
+     }
+ }
+ 
+ /**********************************************************************
+  * 检查连接状态并重连
+  **********************************************************************/
+ void checkConnections() {
+     // 检查WiFi连接
+     if (WiFi.status() != WL_CONNECTED) {
+         Serial.println("[Connection] WiFi disconnected, reconnecting...");
+         wifiConnected = false;
+         connectWiFi();
+     }
+     
+     // 检查MQTT连接
+     if (!mqtt.connected()) {
+         Serial.println("[Connection] MQTT disconnected, reconnecting...");
+         mqttConnected = false;
+         // 先停止旧连接
+         mqtt.loop();
+         mqtt.disconnect();
+         delay(500);
+         connectMQTT();
+     } else {
+         // 保持连接活跃
+         mqtt.loop();
+     }
+ }
+ 
+ /**********************************************************************
+  * Setup函数
+  **********************************************************************/
+ void setup() {
+     Serial.begin(SERIAL_BAUD);
+     delay(1000);
+     
+     // 初始化屏幕
+     tft.begin();
+     tft.setRotation(1);  // 横向
+     tft.fillScreen(ILI9341_BLACK);
+     tft.setTextWrap(false);
+     
+     // 计算右侧宽度并绘制标题
+     RIGHT_PANE_W = tft.width() - RIGHT_PANE_X;
+     drawHeaders();
+     
+     // 清空面板
+     tft.fillRect(LEFT_PANE_X, HEADER_H + 2, LEFT_PANE_W, tft.height() - HEADER_H - 2, ILI9341_BLACK);
+     tft.fillRect(RIGHT_PANE_X, HEADER_H + 2, RIGHT_PANE_W, tft.height() - HEADER_H - 2, ILI9341_BLACK);
+     
+     Serial.println("\n==========================================");
+     Serial.println("Mqtt-tls-iot-guardian-ESP8266");
+     Serial.println("==========================================");
+     Serial.print("Device ID: ");
+     Serial.println(DEVICE_ID);
+     Serial.println("==========================================\n");
+     
+     // 初始化LED
+     pinMode(LED_BUILTIN, OUTPUT);
+     digitalWrite(LED_BUILTIN, HIGH);
+     
+     // 连接WiFi
+     if (!connectWiFi()) {
+         Serial.println("[ERROR] Failed to connect to WiFi, rebooting in 10 seconds...");
+         delay(10000);
+         ESP.restart();
+     }
+     
+     // 连接MQTT
+     if (!connectMQTT()) {
+         Serial.println("[ERROR] Failed to connect to MQTT, will retry in loop");
+     }
+     
+     Serial.println("\n[Setup] Device initialized successfully!");
+     Serial.println("[Setup] Starting main loop...\n");
+ }
+ 
+ /**********************************************************************
+  * Loop函数
+  **********************************************************************/
+ void loop() {
+     // 定期检查连接状态
+     checkConnections();
+     
+     // 处理MQTT消息
+     if (mqtt.connected()) {
+         mqtt.loop();
+         
+         // 发送心跳
+         sendHeartbeat();
+         
+         // 发送传感器数据
+         sendSensorData();
+     }
+     
+     // 闪烁LED表示设备运行中
+     static unsigned long lastLedBlink = 0;
+     unsigned long now = millis();
+     if (now - lastLedBlink >= 1000) {
+         lastLedBlink = now;
+         digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+     }
+     
+     delay(100);
+ }
+ 
+ /**********************************************************************
+  * 注意事项：
+  * 
+  * 1. 配置修改：
+  *    - 设备已预配置好所有参数
+  *    - 如需要修改引脚，调整 TFT_CS, TFT_RST, TFT_DC
+  * 
+  * 2. 库安装：
+  *    - ESP8266WiFi (内置)
+  *    - WiFiClientSecureBearSSL (内置)
+  *    - PubSubClient: 在Arduino IDE库管理中搜索"PubSubClient"安装
+  *    - ArduinoJson: 在Arduino IDE库管理中搜索"ArduinoJson"安装
+  *    - Adafruit_GFX: 在Arduino IDE库管理中搜索"Adafruit GFX"安装
+  *    - Adafruit_ILI9341: 在Arduino IDE库管理中搜索"Adafruit ILI9341"安装
+  * 
+  * 3. MQTT主题规范：
+  *    - 设备状态: devices/esp8266/status
+  *    - 传感器数据: devices/esp8266/sensor
+  *    - 控制命令: devices/esp8266/control
+  *    - 心跳: devices/esp8266/heartbeat
+  *    - 告警: devices/esp8266/alerts
+  * 
+  * 4. 消息格式：
+  *    - 使用JSON格式
+  *    - 包含device_id和时间戳
+  *    - 控制命令支持: restart, led_on, led_off
+  * 
+  * 5. 故障排查：
+  *    - 确保WiFi配置正确
+  *    - 确保MQTT服务器可访问
+  *    - 查看串口日志和屏幕显示
+  * 
+  **********************************************************************/

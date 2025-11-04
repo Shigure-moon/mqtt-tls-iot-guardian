@@ -19,6 +19,9 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """获取当前用户"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="无法验证凭据",
@@ -32,8 +35,10 @@ async def get_current_user(
         )
         username: str = payload.get("sub")
         if username is None:
+            logger.warning("JWT payload missing 'sub' field")
             raise credentials_exception
     except JWTError as e:
+        logger.warning(f"JWT decode error: {e}, token: {token[:20]}...")
         raise credentials_exception
     
     try:
@@ -102,6 +107,17 @@ async def get_current_admin_user(
         )
     return current_user
 
+async def get_current_super_admin_user(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """获取当前超级管理员用户（is_admin为True）"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足：需要超级管理员权限"
+        )
+    return current_user
+
 @router.post("/login", response_model=Token)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -133,6 +149,16 @@ async def login(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="用户未激活"
             )
+    
+        # 更新最后登录时间
+        try:
+            from datetime import datetime, timezone
+            user.last_login_at = datetime.now(timezone.utc)
+            db.add(user)
+            await db.commit()
+        except Exception as update_error:
+            logger.warning(f"Failed to update last_login_at: {update_error}")
+            # 不阻止登录，只是记录警告
         
         # 创建访问令牌和刷新令牌
         try:
@@ -143,7 +169,7 @@ async def login(
             logger.error(f"Token creation error: {token_error}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="令牌创建失败"
+                detail=f"令牌创建失败: {str(token_error)}"
             )
         
         return Token(
@@ -162,15 +188,70 @@ async def login(
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
-    current_user: User = Depends(get_current_user)
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
 ) -> Token:
     """刷新令牌"""
-    access_token = create_access_token(current_user.username)
-    refresh_token = create_refresh_token(current_user.username)
+    import logging
+    logger = logging.getLogger(__name__)
     
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无法验证刷新令牌",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        # 验证refresh token
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        
+        # 检查token类型必须是refresh
+        token_type = payload.get("type")
+        if token_type != "refresh":
+            logger.warning(f"Invalid token type for refresh: {token_type}")
+            raise credentials_exception
+        
+        username: str = payload.get("sub")
+        if username is None:
+            logger.warning("Refresh token payload missing 'sub' field")
+            raise credentials_exception
+        
+        # 获取用户
+        user_service = UserService(db)
+        user = await user_service.get_by_username(username=username)
+        if user is None:
+            logger.warning(f"User not found for refresh token: {username}")
+            raise credentials_exception
+        
+        # 检查用户是否激活
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="用户未激活"
+            )
+        
+        # 创建新的access token和refresh token
+        access_token = create_access_token(user.username)
+        new_refresh_token = create_refresh_token(user.username)
+        
+        return Token(
+            access_token=access_token,
+            refresh_token=new_refresh_token
+        )
+    except JWTError as e:
+        logger.warning(f"Refresh token decode error: {e}")
+        raise credentials_exception
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Refresh token error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"刷新令牌失败: {str(e)}"
     )
 
 @router.post("/register", response_model=User)

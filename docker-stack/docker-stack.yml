@@ -1,0 +1,231 @@
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    image: iot-guardian-backend:latest
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      placement:
+        constraints:
+          - node.role == worker
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - iot_guardian_network
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres-primary:5432/${DB_NAME}
+      - REDIS_URL=redis://redis-master:6379/0
+    secrets:
+      - postgres_password
+      - jwt_secret
+    depends_on:
+      - postgres-primary
+      - redis-master
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 前端服务
+  frontend:
+    image: iot-guardian-frontend:latest
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      - iot_guardian_network
+    depends_on:
+      - backend
+
+  # PostgreSQL主节点
+  postgres-primary:
+    image: postgres:14-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.db == primary
+      restart_policy:
+        condition: on-failure
+    networks:
+      - iot_guardian_data_network
+    volumes:
+      - postgres-primary-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB_FILE=/run/secrets/postgres_db
+      - POSTGRES_USER_FILE=/run/secrets/postgres_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - POSTGRES_REPLICATION_USER=replicator
+      - POSTGRES_REPLICATION_PASSWORD_FILE=/run/secrets/postgres_replication_password
+    secrets:
+      - postgres_db
+      - postgres_user
+      - postgres_password
+      - postgres_replication_password
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=replica"
+      - "-c"
+      - "max_wal_senders=3"
+      - "-c"
+      - "max_replication_slots=3"
+      - "-c"
+      - "hot_standby=on"
+
+  # PostgreSQL从节点
+  postgres-replica:
+    image: postgres:14-alpine
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.labels.db == replica
+      restart_policy:
+        condition: on-failure
+    networks:
+      - iot_guardian_data_network
+    volumes:
+      - postgres-replica-data:/var/lib/postgresql/data
+    environment:
+      - PGUSER=postgres
+      - POSTGRES_MASTER_SERVICE=postgres-primary
+    command:
+      - "bash"
+      - "-c"
+      - |
+        until pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U replicator -v -P -W; do
+          echo "Waiting for primary database..."
+          sleep 2s
+        done
+        echo "standby_mode = 'on'" >> /var/lib/postgresql/data/postgresql.conf
+        echo "primary_conninfo = 'host=postgres-primary port=5432 user=replicator'" >> /var/lib/postgresql/data/postgresql.conf
+        postgres
+
+  # Redis主节点
+  redis-master:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.redis == master
+      restart_policy:
+        condition: on-failure
+    networks:
+      - iot_guardian_data_network
+    volumes:
+      - redis-master-data:/data
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+
+  # Redis从节点
+  redis-slave:
+    image: redis:7-alpine
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+    networks:
+      - iot_guardian_data_network
+    volumes:
+      - redis-slave-data:/data
+    command: redis-server --slaveof redis-master 6379 --requirepass ${REDIS_PASSWORD} --appendonly yes
+
+  # Nginx负载均衡
+  nginx:
+    image: nginx:alpine
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - iot_guardian_network
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+    depends_on:
+      - backend
+      - frontend
+
+networks:
+  iot_guardian_network:
+    driver: overlay
+    attachable: true
+  
+  iot_guardian_data_network:
+    driver: overlay
+  
+  iot_guardian_management_network:
+    driver: overlay
+
+volumes:
+  postgres-primary-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/postgres/primary
+  
+  postgres-replica-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/postgres/replica
+  
+  redis-master-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/redis/master
+  
+  redis-slave-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/redis/slave
+
+secrets:
+  postgres_db:
+    external: true
+  postgres_user:
+    external: true
+  postgres_password:
+    external: true
+  postgres_replication_password:
+    external: true
+  jwt_secret:
+    external: true
+
+configs:
+  nginx_config:
+    external: true
+

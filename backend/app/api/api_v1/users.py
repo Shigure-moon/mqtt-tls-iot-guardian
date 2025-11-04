@@ -44,25 +44,77 @@ async def read_user_me(
     db: AsyncSession = Depends(get_db)
 ):
     """获取当前用户信息"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
-        # 直接返回UserWithPermissions，Pydantic会自动处理
-        return UserWithPermissions(
-            id=current_user.id,
-            username=current_user.username,
-            email=current_user.email,
-            full_name=current_user.full_name,
-            mobile=current_user.mobile,
-            is_active=current_user.is_active,
-            is_admin=current_user.is_admin,
-            created_at=current_user.created_at,
-            updated_at=current_user.updated_at,
-            last_login_at=current_user.last_login_at,
-            roles=[],
-            permissions=[]
-        )
+        # 如果current_user已经是Pydantic模型，直接使用
+        # 否则需要从数据库重新获取以确保数据完整性
+        if hasattr(current_user, 'id'):
+            # 从数据库重新获取用户信息，包括last_login_at等字段
+            user_service = UserService(db)
+            db_user = await user_service.get_by_id(str(current_user.id))
+            
+            if not db_user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="用户不存在"
+                )
+            
+            # 构建UserWithPermissions对象
+            try:
+                # 尝试使用model_validate
+                user_dict = {
+                    'id': db_user.id,
+                    'username': db_user.username,
+                    'email': db_user.email,
+                    'full_name': db_user.full_name,
+                    'mobile': db_user.mobile,
+                    'is_active': db_user.is_active,
+                    'is_admin': db_user.is_admin,
+                    'created_at': db_user.created_at,
+                    'updated_at': db_user.updated_at,
+                    'last_login_at': getattr(db_user, 'last_login_at', None),
+                    'roles': [],
+                    'permissions': []
+                }
+                return UserWithPermissions(**user_dict)
+            except Exception as conv_error:
+                logger.warning(f"Error converting user with model_validate: {conv_error}, trying manual construction")
+                # 手动构造
+                return UserWithPermissions(
+                    id=db_user.id,
+                    username=db_user.username,
+                    email=db_user.email,
+                    full_name=db_user.full_name or "",
+                    mobile=db_user.mobile,
+                    is_active=db_user.is_active,
+                    is_admin=db_user.is_admin,
+                    created_at=db_user.created_at,
+                    updated_at=db_user.updated_at,
+                    last_login_at=getattr(db_user, 'last_login_at', None),
+                    roles=[],
+                    permissions=[]
+                )
+        else:
+            # 如果current_user已经是合适的格式，直接使用
+            return UserWithPermissions(
+                id=current_user.id,
+                username=current_user.username,
+                email=current_user.email,
+                full_name=getattr(current_user, 'full_name', None) or "",
+                mobile=getattr(current_user, 'mobile', None),
+                is_active=current_user.is_active,
+                is_admin=current_user.is_admin,
+                created_at=current_user.created_at,
+                updated_at=current_user.updated_at,
+                last_login_at=getattr(current_user, 'last_login_at', None),
+                roles=[],
+                permissions=[]
+            )
+    except HTTPException:
+        raise
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Error reading user me: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

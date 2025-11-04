@@ -25,8 +25,7 @@ class ServerCertificateResponse(BaseModel):
 
 class ClientCertificateRequest(BaseModel):
     """客户端证书请求"""
-    device_id: str = Field(..., description="设备ID")
-    common_name: Optional[str] = Field(default=None, description="Common Name，默认使用device_id")
+    common_name: str = Field(..., description="Common Name，设备名称或设备ID")
     validity_days: int = Field(default=365, gt=0, le=3650, description="证书有效期（天）")
 
 class ClientCertificateResponse(BaseModel):
@@ -59,4 +58,20 @@ class CertificateRevokeResponse(BaseModel):
     """证书吊销响应"""
     success: bool = Field(..., description="是否成功")
     message: str = Field(..., description="消息")
+
+class ServerCertificateInfo(BaseModel):
+    """服务器证书信息（用于获取）"""
+    id: str
+    certificate: str
+    private_key: str
+    common_name: str
+    serial_number: str
+    issued_at: datetime
+    expires_at: datetime
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 

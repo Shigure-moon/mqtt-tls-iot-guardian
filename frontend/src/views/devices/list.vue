@@ -4,10 +4,16 @@
       <template #header>
         <div class="card-header">
           <span>设备列表</span>
+          <div class="header-actions">
+            <el-button @click="handleRefresh" :loading="loading">
+              <el-icon><Refresh /></el-icon>
+              刷新状态
+            </el-button>
           <el-button type="primary" @click="handleAdd">
             <el-icon><Plus /></el-icon>
             添加设备
           </el-button>
+          </div>
         </div>
       </template>
 
@@ -21,7 +27,11 @@
         <el-table-column prop="type" label="设备类型" width="120" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
+            <el-tag 
+              :color="getStatusColor(row.status)" 
+              effect="dark"
+              :style="{ borderColor: getStatusColor(row.status) }"
+            >
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
@@ -211,7 +221,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Download } from '@element-plus/icons-vue'
+import { Plus, Download, Refresh } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 
 interface Device {
@@ -280,18 +290,22 @@ const deviceFormRules: FormRules = {
   ],
 }
 
-const getStatusType = (status: string) => {
-  const statusMap: Record<string, string> = {
-    active: 'success',
-    inactive: 'info',
-    disabled: 'danger',
-    maintenance: 'warning',
+const getStatusColor = (status: string) => {
+  const colorMap: Record<string, string> = {
+    online: '#409eff',      // 蓝色
+    offline: '#909399',     // 灰色
+    active: '#409eff',      // 蓝色
+    inactive: '#909399',    // 灰色
+    disabled: '#f56c6c',    // 红色
+    maintenance: '#e6a23c',  // 橙色
   }
-  return statusMap[status] || 'info'
+  return colorMap[status] || '#909399'
 }
 
 const getStatusText = (status: string) => {
   const statusMap: Record<string, string> = {
+    online: '在线',
+    offline: '离线',
     active: '在线',
     inactive: '离线',
     disabled: '已禁用',
@@ -305,7 +319,7 @@ const formatTime = (time?: string) => {
   return new Date(time).toLocaleString('zh-CN')
 }
 
-const fetchDevices = async () => {
+const fetchDevices = async (showMessage = false) => {
   loading.value = true
   try {
     const response = await request.get('/devices', {
@@ -316,11 +330,18 @@ const fetchDevices = async () => {
     }) as Device[]
     deviceList.value = Array.isArray(response) ? response : []
     pagination.value.total = deviceList.value.length
+    if (showMessage) {
+      ElMessage.success('设备状态已刷新')
+    }
   } catch (error) {
     ElMessage.error('获取设备列表失败')
   } finally {
     loading.value = false
   }
+}
+
+const handleRefresh = () => {
+  fetchDevices(true)
 }
 
 const handleAdd = () => {
@@ -462,6 +483,12 @@ onMounted(() => {
     font-weight: bold;
   }
 
+  .header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
   .form-tip {
     font-size: 12px;
     color: var(--el-text-color-secondary);
@@ -474,6 +501,10 @@ onMounted(() => {
 
   ol li {
     margin: 8px 0;
+  }
+
+  :deep(.el-tag) {
+    border-color: transparent !important;
   }
 }
 </style>

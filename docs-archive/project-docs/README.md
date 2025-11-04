@@ -143,6 +143,10 @@ ipconfig
 - [部署文档](docs/DEPLOYMENT.md)
 - [安全设计](docs/SECURITY_DESIGN.md)
 - [项目状态](docs/PROJECT_STATUS.md)
+- 📝 [模板开发文档](docs/TEMPLATE_DEVELOPMENT.md) - **模板创建与使用指南**
+- 🚀 [实施路线图](docs/IMPLEMENTATION_ROADMAP.md) - **Docker Swarm容灾与数据库管理实施计划**
+- 🏗️ [Docker Swarm容灾规划](docs/DOCKER_SWARM_DISASTER_RECOVERY.md) - **高可用架构设计**
+- 💾 [数据库管理框架](docs/DATABASE_MANAGEMENT_FRAMEWORK.md) - **数据库管理功能设计**
 
 ## 快速命令参考
 

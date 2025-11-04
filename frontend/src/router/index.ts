@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { ElMessage } from 'element-plus'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -62,6 +63,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '安全管理',
           icon: 'Lock',
+          requiresAdmin: true,  // 需要超级管理员权限
         },
       },
     ],
@@ -80,6 +82,13 @@ router.beforeEach((to, from, next) => {
   // 检查是否需要认证
   if (to.meta.requiresAuth && !userStore.isLoggedIn) {
     next('/login')
+    return
+  }
+  
+  // 检查是否需要管理员权限
+  if (to.meta.requiresAdmin && !userStore.userInfo?.is_admin) {
+    ElMessage.warning('权限不足：需要超级管理员权限')
+    next('/dashboard')
     return
   }
   

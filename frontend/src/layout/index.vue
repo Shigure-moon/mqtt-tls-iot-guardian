@@ -15,7 +15,7 @@
         <el-menu-item
           v-for="route in menuRoutes"
           :key="route.path"
-          :index="route.path"
+          :index="getRoutePath(route.path)"
         >
           <el-icon>
             <component :is="route.meta?.icon || 'Menu'" />
@@ -87,13 +87,32 @@ const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
 
-// 菜单路由（过滤掉隐藏的路由）
+// 菜单路由（过滤掉隐藏的路由和需要管理员权限的路由）
 const menuRoutes = computed(() => {
-  return router.getRoutes().find(r => r.path === '/')?.children?.filter(r => !r.meta?.hidden) || []
+  const routes = router.getRoutes().find(r => r.path === '/')?.children || []
+  return routes.filter(r => {
+    // 过滤隐藏的路由
+    if (r.meta?.hidden) return false
+    // 如果需要管理员权限，检查用户是否为管理员
+    if (r.meta?.requiresAdmin) {
+      return userStore.userInfo?.is_admin === true
+    }
+    return true
+  })
 })
+
+// 获取路由完整路径
+const getRoutePath = (path: string) => {
+  // 如果路径不是以 / 开头，添加 / 前缀
+  return path.startsWith('/') ? path : `/${path}`
+}
 
 // 当前激活的菜单
 const activeMenu = computed(() => {
+  // 如果当前路径是设备详情页，返回设备列表路径
+  if (route.path.startsWith('/devices/') && route.path !== '/devices') {
+    return '/devices'
+  }
   return route.path
 })
 

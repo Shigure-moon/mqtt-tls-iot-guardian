@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic_settings import BaseSettings
 from pydantic import AnyHttpUrl, validator
 
@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    
+    # 证书加密配置
+    CERT_ENCRYPTION_KEY: Optional[str] = None  # 可选：专门的证书加密密钥（base64编码的32字节密钥）
     
     class Config:
         case_sensitive = True

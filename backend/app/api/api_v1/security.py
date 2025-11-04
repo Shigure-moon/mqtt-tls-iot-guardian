@@ -300,4 +300,4 @@ async def get_security_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取安全统计信息失败: {str(e)}"
-        )
+    )

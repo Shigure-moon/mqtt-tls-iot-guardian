@@ -77,6 +77,7 @@ class FirmwareGenerateRequest(BaseModel):
     wifi_password: str
     mqtt_server: str
     ca_cert: Optional[str] = None
+    template_id: Optional[str] = None  # 可选：指定使用的模板ID
 
 class FirmwareResponse(BaseModel):
     device_id: str
