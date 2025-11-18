@@ -1,7 +1,7 @@
 """add version and required_libraries fields to device_templates
 
 Revision ID: add_template_version
-Revises: add_device_templates
+Revises: add_ota_update_tasks
 Create Date: 2025-01-04 16:00:00.000000
 
 """
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = 'add_template_version'
-down_revision = 'add_device_templates'
+down_revision = 'add_ota_update_tasks'
 branch_labels = None
 depends_on = None
 

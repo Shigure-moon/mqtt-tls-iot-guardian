@@ -1,0 +1,40 @@
+@startuml C4_Container
+!include ../../C4-PlantUML/C4.puml
+!include ../../C4-PlantUML/C4_Context.puml
+!include ../../C4-PlantUML/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+LAYOUT_LANDSCAPE()
+
+title Container Diagram - IoT Security Management System
+
+Person(user, "管理员", "管理IoT设备和安全策略")
+Person(developer, "开发者", "开发和维护系统")
+
+System_Boundary(iot_security_system, "IoT安全管理系统") {
+    Container(web_app, "Web应用", "Vue 3, TypeScript", "提供用户界面，设备管理，监控面板")
+    Container(api, "API服务", "FastAPI, Python", "提供RESTful API，处理业务逻辑")
+    Container(mqtt_bridge, "MQTT Bridge", "Python, Paho-MQTT", "MQTT消息桥接，设备消息处理")
+    ContainerDb(database, "数据库", "PostgreSQL", "存储设备信息、证书、日志等")
+    ContainerDb(cache, "缓存", "Redis", "会话管理、实时数据缓存")
+}
+
+System_Ext(mqtt_broker, "MQTT Broker", "EMQX/Mosquitto消息代理")
+System_Ext(device, "IoT设备", "ESP8266等IoT设备")
+System_Ext(arduino_cli, "Arduino CLI", "固件编译工具")
+
+Rel(user, web_app, "使用", "HTTPS")
+Rel(developer, api, "开发", "HTTPS")
+Rel(web_app, api, "API调用", "HTTPS/REST")
+Rel(api, database, "读写", "SQL")
+Rel(api, cache, "读写", "Redis Protocol")
+Rel(api, mqtt_bridge, "消息发送", "内部调用")
+Rel(mqtt_bridge, mqtt_broker, "发布/订阅", "MQTT")
+Rel(mqtt_broker, device, "消息传输", "MQTT over TLS")
+Rel(device, mqtt_broker, "发布/订阅", "MQTT over TLS")
+Rel(api, arduino_cli, "调用", "CLI")
+
+SHOW_LEGEND()
+
+@enduml
+

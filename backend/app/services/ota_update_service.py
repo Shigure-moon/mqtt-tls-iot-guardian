@@ -11,7 +11,7 @@ from sqlalchemy import select
 from uuid import UUID
 
 from app.models.firmware_encryption import OTAUpdateTask, FirmwareBuild
-from app.core.events import mqtt
+from app.core.events import get_mqtt_client
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,7 @@ class OTAUpdateService:
         Returns:
             是否成功推送
         """
+        mqtt = get_mqtt_client()
         if not mqtt or not mqtt.is_connected():
             logger.error("MQTT客户端未连接，无法推送OTA更新")
             return False

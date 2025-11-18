@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 # MQTT客户端
 mqtt = None
 
+def get_mqtt_client():
+    """获取MQTT客户端实例"""
+    global mqtt
+    return mqtt
+
 # Redis客户端
 redis_client = None
 

@@ -22,10 +22,13 @@
 ```
 
 这个脚本会：
-1. 启动所有Docker服务（PostgreSQL、Redis、MQTT）
+1. 启动所有Docker服务（PostgreSQL、Redis）
 2. 检查服务状态和端口
-3. 运行数据库迁移
-4. 启动后端服务
+3. 自动检测并激活conda环境（cyber_sentinal或iot-security）
+4. 检查日志目录权限
+5. 运行数据库迁移（使用 `python -m alembic`）
+6. 检查LLM安全集成配置
+7. 启动后端服务
 
 #### 启动前端
 
@@ -37,6 +40,18 @@
 1. 检查Node.js环境
 2. 安装依赖（如需要）
 3. 启动Vite开发服务器
+
+#### 启动LLM安全服务（可选）
+
+```bash
+./scripts/start_llm_security.sh
+```
+
+这个脚本会：
+1. 检查LLM-IDS-Agent配置和依赖
+2. 检查CyberSentinal配置和依赖
+3. 检查Elasticsearch服务状态
+4. 提供启动指导
 
 ### 方式三：手动启动
 
@@ -84,8 +99,8 @@ npm run dev
 
 ## 服务端口
 
-- **PostgreSQL**: 5433 (容器内: 5432)
-- **Redis**: 6380 (容器内: 6379)
+- **PostgreSQL**: 5434 (容器内: 5432)
+- **Redis**: 6381 (容器内: 6379)
 - **MQTT**: 
   - 1883 (非TLS MQTT协议)
   - 8883 (TLS加密MQTT协议)
@@ -112,6 +127,15 @@ DB_PASSWORD=password
 REDIS_HOST=localhost
 REDIS_PORT=6381
 REDIS_DB=0
+
+# LLM安全集成配置（可选）
+LLM_IDS_AGENT_ENABLED=true
+LLM_IDS_AGENT_API_URL=http://localhost:8001
+CYBERSENTINAL_ENABLED=true
+CYBERSENTINAL_API_URL=http://localhost:8002
+AUTO_DEVICE_ISOLATION=true
+AUTO_CERT_REVOCATION=true
+INTERNAL_API_KEY=your_internal_api_key_here
 
 # MQTT配置
 MQTT_BROKER_HOST=localhost

@@ -1,8 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 from app.api.api_v1.auth import get_current_active_user
 from app.core.database import get_db
+from app.core.config import settings
 from app.schemas.device import (
     Device, DeviceCreate, DeviceUpdate,
     DeviceCertificate, DeviceCertificateCreate,
@@ -13,6 +15,11 @@ from app.services.device import DeviceService
 from app.schemas.user import User
 from app.services.firmware import FirmwareService
 from app.services.certificate import CertificateService
+from app.core.events import get_mqtt_client
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -543,6 +550,135 @@ async def generate_device_firmware(
         firmware_code=firmware_code,
         message=f"固件代码已生成并保存到 {firmware_file}"
     )
+
+# 设备命令请求模型
+class DeviceCommandRequest(BaseModel):
+    command: str
+    topic: Optional[str] = None
+    payload: Optional[Dict[str, Any]] = None
+    qos: int = 1
+
+class DeviceCommandResponse(BaseModel):
+    success: bool
+    message: str
+    topic: str
+    command: str
+
+@router.post("/{device_id}/command", response_model=DeviceCommandResponse)
+async def send_device_command(
+    device_id: str,
+    command_request: DeviceCommandRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> DeviceCommandResponse:
+    """向设备发送MQTT控制命令"""
+    try:
+        # 验证设备是否存在
+        # device_id可能是UUID或device_id字符串，需要兼容两种格式
+        device_service = DeviceService(db)
+        device = None
+        
+        # 先尝试作为UUID查找
+        try:
+            from uuid import UUID
+            device_uuid = UUID(device_id)
+            device = await device_service.get_by_id(str(device_uuid))
+        except (ValueError, TypeError):
+            # 如果不是UUID，尝试作为device_id查找
+            device = await device_service.get_by_device_id(device_id)
+        
+        if not device:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="设备不存在"
+            )
+        
+        # 使用设备的device_id（字符串）作为MQTT主题的设备标识
+        actual_device_id = device.device_id
+        
+        # 获取MQTT客户端实例
+        mqtt = get_mqtt_client()
+        
+        # 检查MQTT客户端是否可用
+        if mqtt is None:
+            logger.error("MQTT client is None, MQTT service not initialized")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="MQTT服务未初始化，请检查后端日志和MQTT配置"
+            )
+        
+        # 检查MQTT连接状态
+        # 注意：paho-mqtt的is_connected()可能在某些情况下不准确
+        # 如果MQTT客户端能够接收消息，说明连接是正常的
+        # 我们直接尝试发布消息，如果失败再报错
+        try:
+            is_connected = mqtt.is_connected()
+            logger.debug(f"MQTT is_connected() returned: {is_connected}")
+        except Exception as e:
+            logger.error(f"Error checking MQTT connection status: {e}")
+            is_connected = False
+        
+        # 即使is_connected()返回False，如果MQTT客户端存在且能接收消息，我们也尝试发布
+        # 因为paho-mqtt在某些情况下is_connected()可能不准确
+        if not is_connected:
+            logger.warning(f"MQTT is_connected() returned False, but will attempt to publish anyway")
+            logger.warning(f"MQTT broker: {settings.MQTT_BROKER_HOST}:{settings.MQTT_BROKER_PORT}")
+            # 不立即抛出错误，而是尝试发布消息，如果发布失败再报错
+        
+        # 构建MQTT主题（默认使用 devices/{actual_device_id}/control）
+        topic = command_request.topic or f"devices/{actual_device_id}/control"
+        
+        # 构建消息负载
+        message_payload: Dict[str, Any] = {
+            "command": command_request.command,
+            "device_id": actual_device_id,
+            "timestamp": None  # 将在下面设置
+        }
+        
+        # 如果有额外的payload，合并进去
+        if command_request.payload:
+            message_payload.update(command_request.payload)
+        
+        # 添加时间戳
+        from datetime import datetime
+        message_payload["timestamp"] = datetime.utcnow().isoformat()
+        
+        # 转换为JSON字符串
+        payload_str = json.dumps(message_payload)
+        
+        # 发布MQTT消息
+        try:
+            result = mqtt.publish(topic, payload_str, qos=command_request.qos)
+            logger.debug(f"MQTT publish result: rc={result.rc}, mid={result.mid if hasattr(result, 'mid') else 'N/A'}")
+        except Exception as e:
+            logger.error(f"MQTT publish failed with exception: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"MQTT发布消息失败: {str(e)}"
+            )
+        
+        if result.rc == 0:
+            logger.info(f"设备命令已发送: device_id={actual_device_id}, command={command_request.command}, topic={topic}")
+            return DeviceCommandResponse(
+                success=True,
+                message="命令已成功发送到设备",
+                topic=topic,
+                command=command_request.command
+            )
+        else:
+            logger.error(f"MQTT发布失败: device_id={actual_device_id}, rc={result.rc}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"发送命令失败，MQTT返回码: {result.rc}"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"发送设备命令失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"发送设备命令失败: {str(e)}"
+        )
 
 @router.get("/{device_id}/firmware/download")
 async def download_device_firmware(

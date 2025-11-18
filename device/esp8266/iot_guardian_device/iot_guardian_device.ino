@@ -1,29 +1,29 @@
 /**********************************************************************
- * IoT安全管理系统 - ESP8266设备端（带屏幕显示）
+ * IoT安全管理系统 - ESP8266智能门锁设备端（带屏幕显示）
  * 
- * 设备ID: esp8266
- * 设备名称: esp8266
- * 
+ * 设备ID: door_lock_001
+ * 设备名称: 智能门锁
  * 功能：
  * - WiFi连接
  * - MQTT over TLS安全通信
  * - ILI9341屏幕显示
+ * - 门锁控制（锁定/解锁）
  * - 自动订阅设备主题
- * - 发送心跳和传感器数据
+ * - 发送心跳和门锁状态数据
  * - 接收控制命令
  * 
  * 配置：
- * - MQTT Broker: 192.168.1.8
+ * - MQTT Broker: 10.42.0.1
  * - 端口: 8883 (TLS)
  * - 认证: 用户名密码 + TLS证书
  * - 屏幕: ILI9341 TFT显示屏
  * 
  * 主题规范：
- * - 设备状态: devices/esp8266/status
- * - 传感器数据: devices/esp8266/sensor
- * - 控制命令: devices/esp8266/control
- * - 告警信息: devices/esp8266/alerts
- * - 心跳: devices/esp8266/heartbeat
+ * - 设备状态: devices/door_lock_001/status
+ * - 传感器数据: devices/door_lock_001/sensor
+ * - 控制命令: devices/door_lock_001/control
+ * - 告警信息: devices/door_lock_001/alerts
+ * - 心跳: devices/door_lock_001/heartbeat
  * 
  * 所需库：
  * - ESP8266WiFi
@@ -41,15 +41,18 @@
  #include <Adafruit_GFX.h>
  #include <Adafruit_ILI9341.h>
  
- // ====== 根据实际接线修改 ======
- #define TFT_CS D2
- #define TFT_RST D3
- #define TFT_DC D4
- Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);
- 
- // ====== 设备配置 ======
- #define DEVICE_ID "esp8266"              // 设备唯一ID
- #define DEVICE_NAME "esp8266"          // 设备名称（屏幕显示用）
+// ====== 根据实际接线修改 ======
+#define TFT_CS D2
+#define TFT_RST D3
+#define TFT_DC D4
+Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);
+
+// ====== 门锁控制引脚 ======
+// #define LOCK_PIN D5              // 门锁控制引脚（继电器控制）- 已禁用，仅模拟
+
+// ====== 设备配置 ======
+#define DEVICE_ID "door_lock_001"              // 设备唯一ID
+#define DEVICE_NAME "智能门锁"                  // 设备名称（屏幕显示用）
  
  // WiFi配置
  const char* ssid = "huawei9930";            // WiFi网络名称
@@ -107,27 +110,38 @@ ipY=
  PubSubClient mqtt(wifiClient);
  #endif
  
- // ====== 屏幕布局（左：MQTT流程，右：传感器记录） ======
- static const int16_t LEFT_PANE_X = 0;
- static const int16_t LEFT_PANE_W = 200;
- static const int16_t RIGHT_PANE_X = LEFT_PANE_W + 1;
- static int16_t RIGHT_PANE_W = 120;
- static const int16_t HEADER_H = 30;
- static const int16_t LINE_H = 12;
- 
- // 动态游标
- static int16_t yLeft = HEADER_H + 2;
- static int16_t yRight = HEADER_H + 2;
- 
- // ====== 全局变量 ======
- unsigned long lastHeartbeat = 0;
- unsigned long lastSensorPub = 0;
- const unsigned long HEARTBEAT_INTERVAL = 30000;  // 30秒心跳
- const unsigned long SENSOR_INTERVAL = 10000;     // 10秒传感器数据
- 
- // 连接状态
- bool wifiConnected = false;
- bool mqttConnected = false;
+// ====== 门锁状态 ======
+enum LockState {
+  LOCKED,      // 已锁定
+  UNLOCKED     // 已解锁
+};
+
+LockState lockState = LOCKED;
+
+// ====== 屏幕布局（左：MQTT流程和锁状态，右：状态信息） ======
+static const int16_t LEFT_PANE_X = 0;
+static const int16_t LEFT_PANE_W = 200;
+static const int16_t RIGHT_PANE_X = LEFT_PANE_W + 1;
+static int16_t RIGHT_PANE_W = 120;
+static const int16_t HEADER_H = 30;
+static const int16_t LINE_H = 12;
+
+// 动态游标
+static int16_t yLeft = HEADER_H + 2;
+static int16_t yRight = HEADER_H + 2;
+
+// ====== 全局变量 ======
+unsigned long lastHeartbeat = 0;
+unsigned long lastSensorPub = 0;
+const unsigned long HEARTBEAT_INTERVAL = 30000;  // 30秒心跳
+const unsigned long SENSOR_INTERVAL = 10000;     // 10秒传感器数据
+
+// 连接状态
+bool wifiConnected = false;
+bool mqttConnected = false;
+
+// 电池电量（模拟）
+float batteryLevel = 100.0;
  
  #define SERIAL_BAUD 115200
  
@@ -166,74 +180,140 @@ ipY=
      printLineInPane(RIGHT_PANE_X, yRight, RIGHT_PANE_W, s, color);
  }
  
- /**********************************************************************
-  * 绘制左右两个标题栏
-  **********************************************************************/
- void drawHeaders() {
-     // 左标题 - MQTT连接状态
-     tft.fillRect(LEFT_PANE_X, 0, LEFT_PANE_W, HEADER_H, ILI9341_BLUE);
-     tft.setTextColor(ILI9341_WHITE);
-     tft.setTextSize(2);
-     tft.setCursor(LEFT_PANE_X + 4, 6);
-     tft.print("MQTT");
+/**********************************************************************
+ * 绘制左右两个标题栏
+ **********************************************************************/
+void drawHeaders() {
+    // 左标题 - MQTT连接状态
+    tft.fillRect(LEFT_PANE_X, 0, LEFT_PANE_W, HEADER_H, ILI9341_BLUE);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setCursor(LEFT_PANE_X + 4, 6);
+    tft.print("MQTT");
+
+    // 右标题 - 心跳日志
+    tft.fillRect(RIGHT_PANE_X, 0, RIGHT_PANE_W, HEADER_H, ILI9341_DARKGREEN);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setCursor(RIGHT_PANE_X + 4, 6);
+    tft.print("Heartbeat");
+
+    // 中间分隔线
+    tft.drawFastVLine(LEFT_PANE_W, 0, tft.height(), ILI9341_DARKGREY);
+}
  
-     // 右标题 - 传感器数据
-     tft.fillRect(RIGHT_PANE_X, 0, RIGHT_PANE_W, HEADER_H, ILI9341_DARKGREEN);
-     tft.setTextColor(ILI9341_WHITE);
-     tft.setTextSize(2);
-     tft.setCursor(RIGHT_PANE_X + 4, 6);
-     tft.print("Data");
- 
-     // 中间分隔线
-     tft.drawFastVLine(LEFT_PANE_W, 0, tft.height(), ILI9341_DARKGREY);
- }
- 
- /**********************************************************************
-  * MQTT消息回调函数
-  **********************************************************************/
- void mqttCallback(char* topic, byte* payload, unsigned int length) {
-     Serial.print("[MQTT] Received message on topic: ");
-     Serial.println(topic);
-     
-     // 左侧：显示接收到的消息
-     printLeftLine("[RX] Incoming msg", ILI9341_CYAN);
-     
-     // 显示HEX（最多16字节）
-     String encryptedHex = "";
-     for (unsigned int i = 0; i < min(length, (unsigned int)16); i++) {
-         if (i) encryptedHex += " ";
-         uint8_t b = payload[i];
-         if (b < 16) encryptedHex += "0";
-         encryptedHex += String(b, HEX);
-     }
-     if (length > 16) encryptedHex += " ...";
-     printLeftLine("Encrypted(hex):", ILI9341_MAGENTA);
-     printLeftLine(encryptedHex, ILI9341_MAGENTA);
- 
-     // 模拟TLS流程
-     printLeftLine("TLS: handshake OK", ILI9341_YELLOW);
-     printLeftLine("TLS: verify cert OK", ILI9341_YELLOW);
-     printLeftLine("TLS: AES-GCM decrypt", ILI9341_YELLOW);
- 
-     // 明文
-     String msg;
-     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-     printLeftLine("Plaintext:", ILI9341_GREEN);
-     printLeftLine(msg, ILI9341_GREEN);
-     printLeftLine("Topic: " + String(topic), ILI9341_WHITE);
-     
-     // 简单的命令解析
-     if (strstr(msg.c_str(), "restart")) {
-         printLeftLine("CMD: Restarting...", ILI9341_RED);
-         ESP.restart();
-     } else if (strstr(msg.c_str(), "led_on")) {
-         printLeftLine("CMD: LED ON", ILI9341_GREEN);
-         digitalWrite(LED_BUILTIN, LOW);
-     } else if (strstr(msg.c_str(), "led_off")) {
-         printLeftLine("CMD: LED OFF", ILI9341_GREEN);
-         digitalWrite(LED_BUILTIN, HIGH);
-     }
- }
+/**********************************************************************
+ * 锁定门锁（模拟）
+ **********************************************************************/
+void lockDoor() {
+    if (lockState == LOCKED) return;
+    lockState = LOCKED;
+    // digitalWrite(LOCK_PIN, HIGH);  // 硬件控制已禁用，仅模拟
+    printLeftLine("Lock: LOCKED", ILI9341_RED);
+    sendStatusUpdate();
+    Serial.println("[Lock] Door locked (simulated)");
+}
+
+/**********************************************************************
+ * 解锁门锁（模拟）
+ **********************************************************************/
+void unlockDoor() {
+    if (lockState == UNLOCKED) return;
+    lockState = UNLOCKED;
+    // digitalWrite(LOCK_PIN, LOW);   // 硬件控制已禁用，仅模拟
+    printLeftLine("Lock: UNLOCKED", ILI9341_GREEN);
+    sendStatusUpdate();
+    Serial.println("[Lock] Door unlocked (simulated)");
+}
+
+/**********************************************************************
+ * 发送状态更新
+ **********************************************************************/
+void sendStatusUpdate() {
+    DynamicJsonDocument doc(256);
+    doc["device_id"] = DEVICE_ID;
+    doc["status"] = (lockState == LOCKED) ? "locked" : "unlocked";
+    doc["lock_state"] = (lockState == LOCKED) ? "locked" : "unlocked";
+    doc["battery"] = batteryLevel;
+    doc["timestamp"] = millis() / 1000;
+    
+    String message;
+    serializeJson(doc, message);
+    
+    if (mqtt.publish(topic_status, message.c_str())) {
+        Serial.println("[Status] Update sent");
+    } else {
+        Serial.println("[Status] Update failed");
+    }
+}
+
+/**********************************************************************
+ * MQTT消息回调函数
+ **********************************************************************/
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    Serial.print("[MQTT] Received message on topic: ");
+    Serial.println(topic);
+    
+    // 左侧：显示接收到的消息
+    printLeftLine("[RX] Incoming msg", ILI9341_CYAN);
+    
+    // 显示HEX（最多16字节）
+    String encryptedHex = "";
+    for (unsigned int i = 0; i < min(length, (unsigned int)16); i++) {
+        if (i) encryptedHex += " ";
+        uint8_t b = payload[i];
+        if (b < 16) encryptedHex += "0";
+        encryptedHex += String(b, HEX);
+    }
+    if (length > 16) encryptedHex += " ...";
+    printLeftLine("Encrypted(hex):", ILI9341_MAGENTA);
+    printLeftLine(encryptedHex, ILI9341_MAGENTA);
+
+    // 模拟TLS流程
+    printLeftLine("TLS: handshake OK", ILI9341_YELLOW);
+    printLeftLine("TLS: verify cert OK", ILI9341_YELLOW);
+    printLeftLine("TLS: AES-GCM decrypt", ILI9341_YELLOW);
+
+    // 明文
+    String msg;
+    for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
+    printLeftLine("Plaintext:", ILI9341_GREEN);
+    printLeftLine(msg, ILI9341_GREEN);
+    printLeftLine("Topic: " + String(topic), ILI9341_WHITE);
+    
+    // 解析JSON命令
+    DynamicJsonDocument doc(512);
+    DeserializationError error = deserializeJson(doc, msg);
+    
+    if (!error && doc.containsKey("command")) {
+        String command = doc["command"].as<String>();
+        printLeftLine("CMD: " + command, ILI9341_CYAN);
+        
+        if (command == "lock" || command == "锁定") {
+            lockDoor();
+        } else if (command == "unlock" || command == "解锁") {
+            unlockDoor();
+        } else if (command == "toggle" || command == "切换") {
+            if (lockState == LOCKED) {
+                unlockDoor();
+            } else {
+                lockDoor();
+            }
+        } else if (command == "status" || command == "状态") {
+            sendStatusUpdate();
+        }
+    } else {
+        // 简单的字符串命令解析（兼容旧格式）
+        if (strstr(msg.c_str(), "lock") || strstr(msg.c_str(), "锁定")) {
+            lockDoor();
+        } else if (strstr(msg.c_str(), "unlock") || strstr(msg.c_str(), "解锁")) {
+            unlockDoor();
+        } else if (strstr(msg.c_str(), "restart")) {
+            printLeftLine("CMD: Restarting...", ILI9341_RED);
+            ESP.restart();
+        }
+    }
+}
  
  /**********************************************************************
   * 连接WiFi
@@ -329,10 +409,9 @@ ipY=
          mqtt.subscribe(topic_alerts);
          printLeftLine("Sub: alerts", ILI9341_WHITE);
          
-         // 发送上线消息
-         String onlineMsg = "{\"status\":\"online\",\"device_id\":\"" + String(DEVICE_ID) + "\"}";
-         mqtt.publish(topic_status, onlineMsg.c_str());
-         printLeftLine("Pub: online", ILI9341_GREEN);
+        // 发送上线消息
+        sendStatusUpdate();
+        printLeftLine("Pub: online", ILI9341_GREEN);
          
          delay(500);
          return true;
@@ -349,74 +428,88 @@ ipY=
      }
  }
  
- /**********************************************************************
-  * 发送心跳消息
-  **********************************************************************/
- void sendHeartbeat() {
-     unsigned long now = millis();
-     if (now - lastHeartbeat >= HEARTBEAT_INTERVAL) {
-         lastHeartbeat = now;
-         
-         DynamicJsonDocument doc(256);
-         doc["device_id"] = DEVICE_ID;
-         doc["timestamp"] = now / 1000;
-         doc["uptime"] = now / 1000;
-         doc["heap"] = ESP.getFreeHeap();
-         doc["rssi"] = WiFi.RSSI();
-         
-         String message;
-         serializeJson(doc, message);
-         
-         if (mqtt.publish(topic_heartbeat, message.c_str())) {
-             Serial.println("[Heartbeat] Sent");
-         } else {
-             Serial.println("[Heartbeat] Failed");
-         }
-     }
- }
+/**********************************************************************
+ * 发送心跳消息
+ **********************************************************************/
+void sendHeartbeat() {
+    unsigned long now = millis();
+    if (now - lastHeartbeat >= HEARTBEAT_INTERVAL) {
+        lastHeartbeat = now;
+        
+        DynamicJsonDocument doc(256);
+        doc["device_id"] = DEVICE_ID;
+        doc["timestamp"] = now / 1000;
+        doc["uptime"] = now / 1000;
+        doc["heap"] = ESP.getFreeHeap();
+        doc["rssi"] = WiFi.RSSI();
+        doc["battery"] = batteryLevel;
+        doc["lock_state"] = (lockState == LOCKED) ? "locked" : "unlocked";
+        
+        String message;
+        serializeJson(doc, message);
+        
+        if (mqtt.publish(topic_heartbeat, message.c_str())) {
+            Serial.println("[Heartbeat] Sent");
+            
+            // 右侧面板显示心跳日志
+            printRightLine("t=" + String(now / 1000) + "s", ILI9341_CYAN);
+            printRightLine("Heartbeat OK", ILI9341_GREEN);
+            printRightLine("Heap:" + String(ESP.getFreeHeap()), ILI9341_YELLOW);
+            printRightLine("RSSI:" + String(WiFi.RSSI()), ILI9341_YELLOW);
+            String lockStatus = (lockState == LOCKED) ? "LOCKED" : "UNLOCK";
+            uint16_t lockColor = (lockState == LOCKED) ? ILI9341_RED : ILI9341_GREEN;
+            printRightLine("Lock:" + lockStatus, lockColor);
+        } else {
+            Serial.println("[Heartbeat] Failed");
+            printRightLine("Heartbeat FAIL", ILI9341_RED);
+        }
+    }
+}
  
- /**********************************************************************
-  * 发送传感器数据
-  **********************************************************************/
- void sendSensorData() {
-     unsigned long now = millis();
-     if (now - lastSensorPub >= SENSOR_INTERVAL) {
-         lastSensorPub = now;
-         
-         DynamicJsonDocument doc(512);
-         doc["device_id"] = DEVICE_ID;
-         doc["timestamp"] = now / 1000;
-         
-         // 模拟传感器数据
-         float temp = 25.5 + random(0, 100) / 10.0;
-         float humi = 60.0 + random(0, 200) / 10.0;
-         float volt = 3.3 + random(0, 10) / 100.0;
-         float batt = 85.0 + random(0, 200) / 10.0;
-         
-         doc["temperature"] = temp;
-         doc["humidity"] = humi;
-         doc["voltage"] = volt;
-         doc["battery"] = batt;
-         doc["status"]["wifi"] = wifiConnected ? "connected" : "disconnected";
-         doc["status"]["mqtt"] = mqttConnected ? "connected" : "disconnected";
-         doc["status"]["uptime"] = now / 1000;
-         
-         String message;
-         serializeJson(doc, message);
-         
-         if (mqtt.publish(topic_sensor, message.c_str())) {
-             Serial.println("[Sensor] Data sent");
-             
-             // 右侧面板显示传感器数据
-             printRightLine("t=" + String(now / 1000) + "s", ILI9341_CYAN);
-             printRightLine("Temp:" + String(temp, 1) + "C", ILI9341_YELLOW);
-             printRightLine("Hum:" + String(humi, 1) + "%", ILI9341_YELLOW);
-             printRightLine("Batt:" + String(batt, 1) + "%", ILI9341_GREEN);
-         } else {
-             Serial.println("[Sensor] Failed");
-         }
-     }
- }
+/**********************************************************************
+ * 发送传感器数据（门锁状态数据）
+ **********************************************************************/
+void sendSensorData() {
+    unsigned long now = millis();
+    if (now - lastSensorPub >= SENSOR_INTERVAL) {
+        lastSensorPub = now;
+        
+        // 模拟电池电量缓慢下降
+        batteryLevel = max(0.0, batteryLevel - 0.01);
+        
+        DynamicJsonDocument doc(512);
+        doc["device_id"] = DEVICE_ID;
+        doc["timestamp"] = now / 1000;
+        doc["battery"] = batteryLevel;
+        doc["lock_state"] = (lockState == LOCKED) ? "locked" : "unlocked";
+        doc["status"]["wifi"] = wifiConnected ? "connected" : "disconnected";
+        doc["status"]["mqtt"] = mqttConnected ? "connected" : "disconnected";
+        doc["status"]["uptime"] = now / 1000;
+        
+        String message;
+        serializeJson(doc, message);
+        
+        if (mqtt.publish(topic_sensor, message.c_str())) {
+            Serial.println("[Sensor] Data sent");
+            
+            // 右侧面板显示门锁状态信息
+            printRightLine("t=" + String(now / 1000) + "s", ILI9341_CYAN);
+            String lockStatus = (lockState == LOCKED) ? "LOCKED" : "UNLOCK";
+            uint16_t lockColor = (lockState == LOCKED) ? ILI9341_RED : ILI9341_GREEN;
+            printRightLine("Lock:" + lockStatus, lockColor);
+            
+            uint16_t battColor = (batteryLevel > 50) ? ILI9341_GREEN : 
+                                 (batteryLevel > 20) ? ILI9341_YELLOW : ILI9341_RED;
+            printRightLine("Batt:" + String(batteryLevel, 1) + "%", battColor);
+            
+            String wifiStatus = wifiConnected ? "OK" : "NO";
+            uint16_t wifiColor = wifiConnected ? ILI9341_GREEN : ILI9341_RED;
+            printRightLine("WiFi:" + wifiStatus, wifiColor);
+        } else {
+            Serial.println("[Sensor] Failed");
+        }
+    }
+}
  
  /**********************************************************************
   * 检查连接状态并重连
@@ -444,53 +537,64 @@ ipY=
      }
  }
  
- /**********************************************************************
-  * Setup函数
-  **********************************************************************/
- void setup() {
-     Serial.begin(SERIAL_BAUD);
-     delay(1000);
-     
-     // 初始化屏幕
-     tft.begin();
-     tft.setRotation(1);  // 横向
-     tft.fillScreen(ILI9341_BLACK);
-     tft.setTextWrap(false);
-     
-     // 计算右侧宽度并绘制标题
-     RIGHT_PANE_W = tft.width() - RIGHT_PANE_X;
-     drawHeaders();
-     
-     // 清空面板
-     tft.fillRect(LEFT_PANE_X, HEADER_H + 2, LEFT_PANE_W, tft.height() - HEADER_H - 2, ILI9341_BLACK);
-     tft.fillRect(RIGHT_PANE_X, HEADER_H + 2, RIGHT_PANE_W, tft.height() - HEADER_H - 2, ILI9341_BLACK);
-     
-     Serial.println("\n==========================================");
-     Serial.println("Mqtt-tls-iot-guardian-ESP8266");
-     Serial.println("==========================================");
-     Serial.print("Device ID: ");
-     Serial.println(DEVICE_ID);
-     Serial.println("==========================================\n");
-     
-     // 初始化LED
-     pinMode(LED_BUILTIN, OUTPUT);
-     digitalWrite(LED_BUILTIN, HIGH);
-     
-     // 连接WiFi
-     if (!connectWiFi()) {
-         Serial.println("[ERROR] Failed to connect to WiFi, rebooting in 10 seconds...");
-         delay(10000);
-         ESP.restart();
-     }
-     
-     // 连接MQTT
-     if (!connectMQTT()) {
-         Serial.println("[ERROR] Failed to connect to MQTT, will retry in loop");
-     }
-     
-     Serial.println("\n[Setup] Device initialized successfully!");
-     Serial.println("[Setup] Starting main loop...\n");
- }
+/**********************************************************************
+ * Setup函数
+ **********************************************************************/
+void setup() {
+    Serial.begin(SERIAL_BAUD);
+    delay(1000);
+    
+    // 初始化屏幕
+    tft.begin();
+    tft.setRotation(1);  // 横向
+    tft.fillScreen(ILI9341_BLACK);
+    tft.setTextWrap(false);
+    
+    // 计算右侧宽度并绘制标题
+    RIGHT_PANE_W = tft.width() - RIGHT_PANE_X;
+    drawHeaders();
+    
+    // 清空面板
+    tft.fillRect(LEFT_PANE_X, HEADER_H + 2, LEFT_PANE_W, tft.height() - HEADER_H - 2, ILI9341_BLACK);
+    tft.fillRect(RIGHT_PANE_X, HEADER_H + 2, RIGHT_PANE_W, tft.height() - HEADER_H - 2, ILI9341_BLACK);
+    
+    // 重置游标位置（确保从正确位置开始显示）
+    yLeft = HEADER_H + 2;
+    yRight = HEADER_H + 2;
+    
+    Serial.println("\n==========================================");
+    Serial.println("IoT Smart Door Lock - ESP8266");
+    Serial.println("==========================================");
+    Serial.print("Device ID: ");
+    Serial.println(DEVICE_ID);
+    Serial.print("Device Name: ");
+    Serial.println(DEVICE_NAME);
+    Serial.println("==========================================\n");
+    
+    // 初始化LED
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, HIGH);
+    
+    // 初始化门锁状态（模拟，无硬件控制）
+    // pinMode(LOCK_PIN, OUTPUT);
+    // digitalWrite(LOCK_PIN, HIGH);  // 硬件控制已禁用
+    lockState = LOCKED;
+    
+    // 连接WiFi
+    if (!connectWiFi()) {
+        Serial.println("[ERROR] Failed to connect to WiFi, rebooting in 10 seconds...");
+        delay(10000);
+        ESP.restart();
+    }
+    
+    // 连接MQTT
+    if (!connectMQTT()) {
+        Serial.println("[ERROR] Failed to connect to MQTT, will retry in loop");
+    }
+    
+    Serial.println("\n[Setup] Device initialized successfully!");
+    Serial.println("[Setup] Starting main loop...\n");
+}
  
  /**********************************************************************
   * Loop函数
@@ -524,9 +628,10 @@ ipY=
  /**********************************************************************
   * 注意事项：
   * 
-  * 1. 配置修改：
-  *    - 设备已预配置好所有参数
-  *    - 如需要修改引脚，调整 TFT_CS, TFT_RST, TFT_DC
+ * 1. 配置修改：
+ *    - 设备已预配置好所有参数
+ *    - 如需要修改引脚，调整 TFT_CS, TFT_RST, TFT_DC
+ *    - 门锁控制引脚: LOCK_PIN (D5)
   * 
   * 2. 库安装：
   *    - ESP8266WiFi (内置)
@@ -536,17 +641,18 @@ ipY=
   *    - Adafruit_GFX: 在Arduino IDE库管理中搜索"Adafruit GFX"安装
   *    - Adafruit_ILI9341: 在Arduino IDE库管理中搜索"Adafruit ILI9341"安装
   * 
-  * 3. MQTT主题规范：
-  *    - 设备状态: devices/esp8266/status
-  *    - 传感器数据: devices/esp8266/sensor
-  *    - 控制命令: devices/esp8266/control
-  *    - 心跳: devices/esp8266/heartbeat
-  *    - 告警: devices/esp8266/alerts
-  * 
-  * 4. 消息格式：
-  *    - 使用JSON格式
-  *    - 包含device_id和时间戳
-  *    - 控制命令支持: restart, led_on, led_off
+ * 3. MQTT主题规范：
+ *    - 设备状态: devices/door_lock_001/status
+ *    - 传感器数据: devices/door_lock_001/sensor
+ *    - 控制命令: devices/door_lock_001/control
+ *    - 心跳: devices/door_lock_001/heartbeat
+ *    - 告警: devices/door_lock_001/alerts
+ * 
+ * 4. 消息格式：
+ *    - 使用JSON格式
+ *    - 包含device_id和时间戳
+ *    - 控制命令支持: lock, unlock, toggle, status
+ *    - 命令格式: {"command": "lock"} 或 {"command": "unlock"}
   * 
   * 5. 故障排查：
   *    - 确保WiFi配置正确

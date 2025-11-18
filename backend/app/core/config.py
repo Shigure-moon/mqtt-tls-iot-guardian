@@ -71,6 +71,18 @@ class Settings(BaseSettings):
     # 证书加密配置
     CERT_ENCRYPTION_KEY: Optional[str] = None  # 可选：专门的证书加密密钥（base64编码的32字节密钥）
     
+    # LLM安全集成配置
+    LLM_IDS_AGENT_ENABLED: bool = False
+    LLM_IDS_AGENT_API_URL: Optional[str] = None
+    CYBERSENTINAL_ENABLED: bool = False
+    CYBERSENTINAL_API_URL: Optional[str] = None
+    
+    # 威胁响应配置
+    AUTO_DEVICE_ISOLATION: bool = True
+    AUTO_CERT_REVOCATION: bool = True
+    THREAT_RESPONSE_WEBHOOK: Optional[str] = None
+    INTERNAL_API_KEY: Optional[str] = None  # 内部API密钥（用于LLM-IDS-Agent和CyberSentinal调用）
+    
     class Config:
         case_sensitive = True
         env_file = ".env"

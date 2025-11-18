@@ -59,7 +59,7 @@
                   style="font-family: monospace; font-size: 12px;"
                 />
                 <el-button
-                  type="text"
+                  link
                   size="small"
                   @click="copyToClipboard(serverCertInfo.certificate)"
                   style="margin-top: 5px;"
@@ -77,7 +77,7 @@
                   style="font-family: monospace; font-size: 12px;"
                 />
                 <el-button
-                  type="text"
+                  link
                   size="small"
                   @click="copyToClipboard(serverCertInfo.private_key)"
                   style="margin-top: 5px;"
@@ -333,7 +333,7 @@
             />
           </el-table>
           <div v-if="queryResult" style="margin-top: 10px; color: #909399; font-size: 12px">
-            查询完成，共 {{ queryResult.rows.length }} 行，执行时间 {{ queryResult.execution_time }}ms
+            查询完成，共 {{ queryResult.row_count || queryResult.rows.length }} 行，执行时间 {{ queryResult.execution_time }}ms
           </div>
         </el-card>
 
@@ -342,10 +342,16 @@
           <template #header>
             <div class="card-header">
               <span>备份管理</span>
-              <el-button type="primary" @click="handleCreateBackup">
-                <el-icon><Plus /></el-icon>
-                创建备份
-              </el-button>
+              <div class="header-actions">
+                <el-button @click="refreshBackups" :loading="backupLoading">
+                  <el-icon><Refresh /></el-icon>
+                  刷新
+                </el-button>
+                <el-button type="primary" @click="handleCreateBackup" :loading="backupLoading">
+                  <el-icon><Plus /></el-icon>
+                  创建备份
+                </el-button>
+              </div>
             </div>
           </template>
 
@@ -1091,13 +1097,7 @@ const databaseOverview = ref<DatabaseOverview>({
 
 const tableLoading = ref(false)
 const tableSearch = ref('')
-const tables = ref<DatabaseTable[]>([
-  { name: 'devices', size: '500 MB', row_count: 10000, index_count: 3, last_update: new Date().toISOString() },
-  { name: 'device_certificates', size: '200 MB', row_count: 5000, index_count: 2, last_update: new Date().toISOString() },
-  { name: 'users', size: '50 MB', row_count: 100, index_count: 2, last_update: new Date().toISOString() },
-  { name: 'device_logs', size: '300 MB', row_count: 500000, index_count: 4, last_update: new Date().toISOString() },
-  { name: 'security_events', size: '150 MB', row_count: 200000, index_count: 3, last_update: new Date().toISOString() },
-])
+const tables = ref<DatabaseTable[]>([])
 
 const filteredTables = computed(() => {
   if (!tableSearch.value) return tables.value
@@ -1111,10 +1111,7 @@ const sqlQuery = ref('SELECT * FROM devices LIMIT 10')
 const queryResult = ref<QueryResult | null>(null)
 
 const backupLoading = ref(false)
-const backups = ref<Backup[]>([
-  { id: '1', name: 'backup_20240101', size: '1.2 GB', created_at: new Date(Date.now() - 86400000).toISOString(), status: 'completed' },
-  { id: '2', name: 'backup_20240102', size: '1.3 GB', created_at: new Date().toISOString(), status: 'completed' },
-])
+const backups = ref<Backup[]>([])
 
 const maintenanceLoading = ref({
   vacuum: false,
@@ -1127,17 +1124,14 @@ const maintenanceLoading = ref({
 })
 
 // 数据库管理相关函数
-const refreshDatabaseOverview = () => {
-  // 模拟数据刷新
-  databaseOverview.value.connection_pool.current = Math.floor(Math.random() * 15) + 5
-  databaseOverview.value.connection_pool.active = databaseOverview.value.connection_pool.current - 2
-  databaseOverview.value.connection_pool.idle = databaseOverview.value.connection_pool.current - databaseOverview.value.connection_pool.active
-  databaseOverview.value.connection_pool.usage_percent = Math.round(
-    (databaseOverview.value.connection_pool.current / databaseOverview.value.connection_pool.max) * 100
-  )
-  databaseOverview.value.performance.avg_query_time = Math.floor(Math.random() * 10) + 1
-  databaseOverview.value.performance.slow_queries = Math.floor(Math.random() * 5)
-  ElMessage.success('数据库概览已刷新')
+const refreshDatabaseOverview = async () => {
+  try {
+    const response = await request.get('/database/overview')
+    databaseOverview.value = response.data || response
+    ElMessage.success('数据库概览已刷新')
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || '获取数据库概览失败')
+  }
 }
 
 const getPoolUsageColor = (percentage: number) => {
@@ -1146,12 +1140,17 @@ const getPoolUsageColor = (percentage: number) => {
   return '#f56c6c'
 }
 
-const refreshTableList = () => {
-  tableLoading.value = true
-  setTimeout(() => {
-    tableLoading.value = false
+const refreshTableList = async () => {
+  try {
+    tableLoading.value = true
+    const response = await request.get('/database/tables')
+    tables.value = response.data || response
     ElMessage.success('表列表已刷新')
-  }, 500)
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || '获取表列表失败')
+  } finally {
+    tableLoading.value = false
+  }
 }
 
 const tableDetailDialogVisible = ref(false)
@@ -1172,10 +1171,17 @@ const tableIndexes = ref([
   { name: 'ix_devices_created_at', columns: 'created_at', unique: false },
 ])
 
-const handleViewTable = (row: DatabaseTable) => {
-  currentTable.value = row
-  // 模拟加载表结构数据（实际应该从API获取）
-  tableDetailDialogVisible.value = true
+const handleViewTable = async (row: DatabaseTable) => {
+  try {
+    currentTable.value = row
+    const response = await request.get(`/database/tables/${row.name}`)
+    const tableDetail = response.data || response
+    tableColumns.value = tableDetail.columns || []
+    tableIndexes.value = tableDetail.indexes || []
+    tableDetailDialogVisible.value = true
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || '获取表详情失败')
+  }
 }
 
 const handleOptimizeTable = async (row: DatabaseTable) => {
@@ -1189,13 +1195,18 @@ const handleOptimizeTable = async (row: DatabaseTable) => {
         type: 'warning',
       }
     )
-    ElMessage.success(`表 "${row.name}" 优化完成`)
-  } catch {
-    // 用户取消
+    const response = await request.post(`/database/tables/${row.name}/optimize`)
+    const result = response.data || response
+    ElMessage.success(result.message || `表 "${row.name}" 优化完成`)
+    await refreshTableList()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || '优化表失败')
+    }
   }
 }
 
-const executeQuery = () => {
+const executeQuery = async () => {
   if (!sqlQuery.value.trim()) {
     ElMessage.warning('请输入SQL查询语句')
     return
@@ -1208,23 +1219,20 @@ const executeQuery = () => {
     return
   }
 
-  queryLoading.value = true
-  
-  // 模拟查询执行
-  setTimeout(() => {
-    // 模拟查询结果
-    queryResult.value = {
-      columns: ['id', 'device_id', 'name', 'type', 'status'],
-      rows: [
-        { id: '1', device_id: 'esp8266-001', name: '温度传感器01', type: 'ESP8266', status: 'online' },
-        { id: '2', device_id: 'esp8266-002', name: '温度传感器02', type: 'ESP8266', status: 'offline' },
-        { id: '3', device_id: 'esp32-001', name: '湿度传感器01', type: 'ESP32', status: 'online' },
-      ],
-      execution_time: Math.floor(Math.random() * 50) + 10,
-    }
-    queryLoading.value = false
+  try {
+    queryLoading.value = true
+    const response = await request.post('/database/query', {
+      query: sqlQuery.value,
+      limit: 1000
+    })
+    queryResult.value = response.data || response
     ElMessage.success('查询执行完成')
-  }, 1000)
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || '执行查询失败')
+    queryResult.value = null
+  } finally {
+    queryLoading.value = false
+  }
 }
 
 const clearQuery = () => {
@@ -1232,44 +1240,71 @@ const clearQuery = () => {
   queryResult.value = null
 }
 
+const refreshBackups = async () => {
+  try {
+    backupLoading.value = true
+    const response = await request.get('/database/backups')
+    backups.value = response.data || response
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || '获取备份列表失败')
+  } finally {
+    backupLoading.value = false
+  }
+}
+
 const handleCreateBackup = async () => {
   try {
-    const { value } = await ElMessageBox.prompt('请输入备份名称', '创建备份', {
+    const { value } = await ElMessageBox.prompt('请输入备份名称（可选，留空将自动生成）', '创建备份', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
-      inputPattern: /^[a-zA-Z0-9_-]+$/,
+      inputPattern: /^[a-zA-Z0-9_-]*$/,
       inputErrorMessage: '备份名称只能包含字母、数字、下划线和连字符',
+      inputPlaceholder: '留空将自动生成',
     })
 
-    if (!value) {
-      return
-    }
-
     backupLoading.value = true
-    // 模拟备份创建
-    setTimeout(() => {
-      const backupName = value || `backup_${new Date().toISOString().split('T')[0].replace(/-/g, '')}`
-      backups.value.unshift({
-        id: Date.now().toString(),
-        name: backupName,
-        size: '1.2 GB',
-        created_at: new Date().toISOString(),
-        status: 'completed',
+    try {
+      const response = await request.post('/database/backups', {
+        name: value || undefined
       })
-      backupLoading.value = false
+      const newBackup = response.data || response
+      backups.value.unshift(newBackup)
       ElMessage.success('备份创建成功')
-    }, 2000)
+    } catch (error: any) {
+      ElMessage.error(error.response?.data?.detail || '创建备份失败')
+    } finally {
+      backupLoading.value = false
+    }
   } catch {
     // 用户取消
   }
 }
 
-const handleDownloadBackup = (row: Backup) => {
-  ElMessage.info(`下载备份: ${row.name}（功能待实现）`)
+const handleDownloadBackup = async (row: Backup) => {
+  try {
+    const response = await request.get(`/database/backups/${row.id}/download`, {
+      responseType: 'blob'
+    })
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', row.name)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('备份下载开始')
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || '下载备份失败')
+  }
 }
 
 const handleRestoreBackup = async (row: Backup) => {
   try {
+    // 第一次确认
     await ElMessageBox.confirm(
       `确定要恢复备份 "${row.name}" 吗？此操作将覆盖当前数据库，请谨慎操作！`,
       '恢复备份',
@@ -1279,7 +1314,33 @@ const handleRestoreBackup = async (row: Backup) => {
         type: 'warning',
       }
     )
-    ElMessage.warning('恢复备份功能待实现，需要二次确认')
+    
+    // 第二次确认
+    await ElMessageBox.confirm(
+      `⚠️ 最后确认：恢复备份 "${row.name}" 将完全覆盖当前数据库，此操作不可逆！\n\n请再次确认是否继续？`,
+      '最后确认',
+      {
+        confirmButtonText: '确认恢复',
+        cancelButtonText: '取消',
+        type: 'error',
+        dangerouslyUseHTMLString: false,
+      }
+    )
+    
+    backupLoading.value = true
+    try {
+      const response = await request.post(`/database/backups/${row.id}/restore`, {
+        confirm: true
+      })
+      const result = response.data || response
+      ElMessage.success(result.message || '备份恢复成功')
+      // 恢复后刷新备份列表
+      await refreshBackups()
+    } catch (error: any) {
+      ElMessage.error(error.response?.data?.detail || '恢复备份失败')
+    } finally {
+      backupLoading.value = false
+    }
   } catch {
     // 用户取消
   }
@@ -1288,7 +1349,7 @@ const handleRestoreBackup = async (row: Backup) => {
 const handleDeleteBackup = async (row: Backup) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除备份 "${row.name}" 吗？`,
+      `确定要删除备份 "${row.name}" 吗？此操作不可恢复！`,
       '删除备份',
       {
         confirmButtonText: '确定',
@@ -1296,10 +1357,16 @@ const handleDeleteBackup = async (row: Backup) => {
         type: 'warning',
       }
     )
-    const index = backups.value.findIndex(b => b.id === row.id)
-    if (index > -1) {
-      backups.value.splice(index, 1)
+    
+    try {
+      await request.delete(`/database/backups/${row.id}`)
+      const index = backups.value.findIndex(b => b.id === row.id)
+      if (index > -1) {
+        backups.value.splice(index, 1)
+      }
       ElMessage.success('备份已删除')
+    } catch (error: any) {
+      ElMessage.error(error.response?.data?.detail || '删除备份失败')
     }
   } catch {
     // 用户取消
@@ -1314,12 +1381,16 @@ const handleVacuum = async () => {
       type: 'warning',
     })
     maintenanceLoading.value.vacuum = true
-    setTimeout(() => {
-      maintenanceLoading.value.vacuum = false
-      ElMessage.success('VACUUM操作完成')
-    }, 2000)
-  } catch {
-    // 用户取消
+    const response = await request.post('/database/maintenance/vacuum')
+    const result = response.data || response
+    ElMessage.success(result.message || 'VACUUM操作完成')
+    await refreshDatabaseOverview()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || 'VACUUM操作失败')
+    }
+  } finally {
+    maintenanceLoading.value.vacuum = false
   }
 }
 
@@ -1331,12 +1402,16 @@ const handleAnalyze = async () => {
       type: 'warning',
     })
     maintenanceLoading.value.analyze = true
-    setTimeout(() => {
-      maintenanceLoading.value.analyze = false
-      ElMessage.success('ANALYZE操作完成')
-    }, 1500)
-  } catch {
-    // 用户取消
+    const response = await request.post('/database/maintenance/analyze')
+    const result = response.data || response
+    ElMessage.success(result.message || 'ANALYZE操作完成')
+    await refreshDatabaseOverview()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || 'ANALYZE操作失败')
+    }
+  } finally {
+    maintenanceLoading.value.analyze = false
   }
 }
 
@@ -1348,12 +1423,16 @@ const handleReindex = async () => {
       type: 'warning',
     })
     maintenanceLoading.value.reindex = true
-    setTimeout(() => {
-      maintenanceLoading.value.reindex = false
-      ElMessage.success('REINDEX操作完成')
-    }, 3000)
-  } catch {
-    // 用户取消
+    const response = await request.post('/database/maintenance/reindex')
+    const result = response.data || response
+    ElMessage.success(result.message || 'REINDEX操作完成')
+    await refreshDatabaseOverview()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || 'REINDEX操作失败')
+    }
+  } finally {
+    maintenanceLoading.value.reindex = false
   }
 }
 
@@ -1365,12 +1444,17 @@ const handleUpdateStats = async () => {
       type: 'warning',
     })
     maintenanceLoading.value.updateStats = true
-    setTimeout(() => {
-      maintenanceLoading.value.updateStats = false
-      ElMessage.success('统计信息更新完成')
-    }, 1000)
-  } catch {
-    // 用户取消
+    // ANALYZE 操作会更新统计信息
+    const response = await request.post('/database/maintenance/analyze')
+    const result = response.data || response
+    ElMessage.success(result.message || '统计信息更新完成')
+    await refreshDatabaseOverview()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || '更新统计信息失败')
+    }
+  } finally {
+    maintenanceLoading.value.updateStats = false
   }
 }
 
@@ -1440,11 +1524,14 @@ const formatTime = (time: string | undefined) => {
   return new Date(time).toLocaleString('zh-CN')
 }
 
-onMounted(() => {
+onMounted(async () => {
   fetchServerCert()
   fetchTemplates()
-  // 初始化数据库概览数据
-  refreshDatabaseOverview()
+  // 初始化数据库概览数据和表列表
+  await refreshDatabaseOverview()
+  await refreshTableList()
+  // 初始化备份列表
+  await refreshBackups()
 })
 </script>
 

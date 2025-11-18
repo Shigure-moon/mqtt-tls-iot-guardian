@@ -1,0 +1,74 @@
+@startuml C4_Deployment
+!include ../../C4-PlantUML/C4.puml
+!include ../../C4-PlantUML/C4_Context.puml
+!include ../../C4-PlantUML/C4_Container.puml
+!include ../../C4-PlantUML/C4_Deployment.puml
+
+LAYOUT_WITH_LEGEND()
+LAYOUT_LANDSCAPE()
+
+title Deployment Diagram - IoT Security Management System
+
+Deployment_Node(internet, "Internet", "公网") {
+}
+
+Deployment_Node(dmz, "DMZ区域", "边界网络") {
+    Deployment_Node(nginx, "Nginx", "反向代理服务器") {
+        Container(nginx_proxy, "Nginx反向代理", "Nginx", "SSL终端，请求转发")
+    }
+}
+
+Deployment_Node(security_zone, "安全区", "内网") {
+    Deployment_Node(app_server, "应用服务器", "Docker Swarm节点") {
+        Container(web_app, "Web应用", "Vue 3, Nginx", "前端应用")
+        Container(api, "API服务", "FastAPI, Python", "后端API服务")
+        Container(mqtt_bridge, "MQTT Bridge", "Python", "MQTT消息桥接")
+    }
+    
+    Deployment_Node(mqtt_cluster, "MQTT集群", "Docker Swarm节点") {
+        Container(mqtt_broker_1, "MQTT Broker 1", "EMQX/Mosquitto", "Master节点")
+        Container(mqtt_broker_2, "MQTT Broker 2", "EMQX/Mosquitto", "Master节点")
+        Container(mqtt_broker_3, "MQTT Broker 3", "EMQX/Mosquitto", "Arbiter节点")
+    }
+    
+    Deployment_Node(db_server, "数据库服务器", "Docker Swarm节点") {
+        ContainerDb(postgres_primary, "PostgreSQL主库", "PostgreSQL", "主数据库")
+        ContainerDb(postgres_replica, "PostgreSQL从库", "PostgreSQL", "从数据库")
+        ContainerDb(redis, "Redis", "Redis", "缓存和会话存储")
+    }
+    
+    Deployment_Node(build_server, "编译服务器", "Docker Swarm节点") {
+        Container(arduino_cli, "Arduino CLI", "Arduino CLI", "固件编译服务")
+    }
+}
+
+Deployment_Node(device_network, "设备网络", "IoT设备网络") {
+    Deployment_Node(device, "IoT设备", "ESP8266") {
+        Container(device_firmware, "设备固件", "Arduino", "设备端固件")
+    }
+}
+
+Person(user, "管理员", "管理IoT设备")
+
+Rel(user, internet, "访问")
+Rel(internet, nginx_proxy, "HTTPS")
+Rel(nginx_proxy, web_app, "HTTP")
+Rel(nginx_proxy, api, "HTTP")
+Rel(web_app, api, "HTTP")
+Rel(api, postgres_primary, "SQL")
+Rel(api, redis, "Redis Protocol")
+Rel(api, mqtt_bridge, "内部调用")
+Rel(mqtt_bridge, mqtt_broker_1, "MQTT")
+Rel(mqtt_bridge, mqtt_broker_2, "MQTT")
+Rel(mqtt_broker_1, mqtt_broker_2, "集群同步")
+Rel(mqtt_broker_1, mqtt_broker_3, "集群同步")
+Rel(mqtt_broker_2, mqtt_broker_3, "集群同步")
+Rel(postgres_primary, postgres_replica, "主从复制")
+Rel(api, arduino_cli, "CLI调用")
+Rel(device_firmware, mqtt_broker_1, "MQTT over TLS")
+Rel(device_firmware, mqtt_broker_2, "MQTT over TLS")
+
+SHOW_LEGEND()
+
+@enduml
+

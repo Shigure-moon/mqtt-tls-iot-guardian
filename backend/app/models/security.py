@@ -14,6 +14,7 @@ class SecurityEvent(Base):
     source_ip = Column(INET)
     device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="SET NULL"))
     description = Column(String, nullable=False)
+    threat_source = Column(String(50), nullable=True)  # 威胁来源: llm_ids_agent, cybersentinal, manual
     raw_data = Column(JSON)
     handled = Column(Boolean, default=False)
     handler_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))

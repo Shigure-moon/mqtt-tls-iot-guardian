@@ -30,6 +30,15 @@
       </el-descriptions>
     </el-card>
 
+    <!-- 设备控制面板（根据设备类型动态加载） -->
+    <component
+      v-if="deviceControlComponent && deviceInfo"
+      :is="deviceControlComponent"
+      :device-id="deviceInfo.device_id || deviceInfo.id"
+      :device-type="deviceInfo.type || ''"
+      style="margin-top: 20px"
+    />
+
     <el-card style="margin-top: 20px">
       <template #header>
         <div class="card-header">
@@ -629,13 +638,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft, Refresh, Plus, Download, Setting, Upload } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
+import { identifyDeviceType, DeviceType } from '@/types/device-types'
+import DoorLockControl from '@/components/devices/DoorLockControl.vue'
+import CurtainControl from '@/components/devices/CurtainControl.vue'
+import SensorHubControl from '@/components/devices/SensorHubControl.vue'
 
 interface Device {
   id: string
@@ -678,6 +691,33 @@ const deviceInfo = ref<Device | null>(null)
 
 // 管理员权限
 const isAdmin = computed(() => userStore.isAdmin)
+
+// 设备控制组件（根据设备类型动态加载）
+const deviceControlComponent = shallowRef<any>(null)
+
+// 根据设备类型加载对应的控制组件
+const loadDeviceControlComponent = () => {
+  if (!deviceInfo.value) {
+    deviceControlComponent.value = null
+    return
+  }
+
+  const deviceTypeInfo = identifyDeviceType(deviceInfo.value)
+  
+  switch (deviceTypeInfo.type) {
+    case DeviceType.DOOR_LOCK:
+      deviceControlComponent.value = DoorLockControl
+      break
+    case DeviceType.CURTAIN:
+      deviceControlComponent.value = CurtainControl
+      break
+    case DeviceType.SENSOR_HUB:
+      deviceControlComponent.value = SensorHubControl
+      break
+    default:
+      deviceControlComponent.value = null
+  }
+}
 
 // 证书管理相关
 const certLoading = ref(false)
@@ -812,6 +852,8 @@ const fetchDeviceDetail = async () => {
   try {
     const response = await request.get(`/devices/${deviceId}`)
     deviceInfo.value = response as unknown as Device
+    // 根据设备类型加载对应的控制组件
+    loadDeviceControlComponent()
     // 获取设备信息后，加载监控数据、告警和证书
     await Promise.all([fetchMetricData(), fetchAlerts(), fetchCertificates()])
   } catch (error) {

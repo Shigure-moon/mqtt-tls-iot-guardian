@@ -1,0 +1,64 @@
+@startuml C4_Component
+!include ../../C4-PlantUML/C4.puml
+!include ../../C4-PlantUML/C4_Context.puml
+!include ../../C4-PlantUML/C4_Container.puml
+!include ../../C4-PlantUML/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+LAYOUT_LANDSCAPE()
+
+title Component Diagram - API Service
+
+Container(api, "API服务", "FastAPI, Python", "提供RESTful API")
+
+System_Boundary(api_service, "API服务") {
+    Component(device_api, "设备管理API", "FastAPI Router", "设备注册、查询、更新")
+    Component(certificate_api, "证书管理API", "FastAPI Router", "证书生成、下发、吊销")
+    Component(firmware_api, "固件管理API", "FastAPI Router", "固件模板、编译、加密、OTA更新")
+    Component(auth_api, "认证API", "FastAPI Router", "用户登录、JWT token管理")
+    Component(security_api, "安全API", "FastAPI Router", "安全事件、入侵检测")
+    Component(monitoring_api, "监控API", "FastAPI Router", "设备监控、数据采集")
+    
+    Component(device_service, "设备服务", "Python Service", "设备业务逻辑")
+    Component(certificate_service, "证书服务", "Python Service", "证书管理逻辑")
+    Component(firmware_service, "固件服务", "Python Service", "固件管理逻辑")
+    Component(security_service, "安全服务", "Python Service", "安全检测逻辑")
+    Component(monitoring_service, "监控服务", "Python Service", "监控数据采集")
+    
+    ComponentDb(database, "数据库", "PostgreSQL", "存储业务数据")
+    ComponentDb(cache, "缓存", "Redis", "缓存和会话")
+}
+
+Container_Ext(mqtt_bridge, "MQTT Bridge", "Python", "MQTT消息桥接")
+Container_Ext(web_app, "Web应用", "Vue 3", "前端应用")
+
+Rel(web_app, device_api, "HTTP")
+Rel(web_app, certificate_api, "HTTP")
+Rel(web_app, firmware_api, "HTTP")
+Rel(web_app, auth_api, "HTTP")
+Rel(web_app, security_api, "HTTP")
+Rel(web_app, monitoring_api, "HTTP")
+
+Rel(device_api, device_service, "调用")
+Rel(certificate_api, certificate_service, "调用")
+Rel(firmware_api, firmware_service, "调用")
+Rel(security_api, security_service, "调用")
+Rel(monitoring_api, monitoring_service, "调用")
+
+Rel(device_service, database, "读写")
+Rel(certificate_service, database, "读写")
+Rel(firmware_service, database, "读写")
+Rel(security_service, database, "读写")
+Rel(monitoring_service, database, "读写")
+
+Rel(device_service, cache, "读写")
+Rel(auth_api, cache, "读写")
+Rel(monitoring_service, cache, "读写")
+
+Rel(device_service, mqtt_bridge, "消息发送")
+Rel(security_service, mqtt_bridge, "消息发送")
+
+SHOW_LEGEND()
+
+@enduml
+

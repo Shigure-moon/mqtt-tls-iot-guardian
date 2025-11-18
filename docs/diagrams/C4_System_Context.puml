@@ -1,0 +1,27 @@
+@startuml C4_System_Context
+!include ../../C4-PlantUML/C4.puml
+!include ../../C4-PlantUML/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+LAYOUT_LANDSCAPE()
+
+title System Context Diagram - IoT Security Management System
+
+Person(user, "管理员", "管理IoT设备和安全策略")
+Person(developer, "开发者", "开发和维护系统")
+
+System(iot_security_system, "IoT安全管理系统", "基于MQTT与TLS的物联网设备安全管理与入侵检测系统")
+
+System_Ext(mqtt_broker, "MQTT Broker", "EMQX/Mosquitto消息代理，处理设备消息")
+System_Ext(device, "IoT设备", "ESP8266等IoT设备，通过MQTT over TLS连接")
+
+Rel(user, iot_security_system, "管理设备", "HTTPS")
+Rel(developer, iot_security_system, "开发维护", "HTTPS/SSH")
+Rel(iot_security_system, mqtt_broker, "管理MQTT配置", "HTTPS/API")
+Rel(device, mqtt_broker, "发布/订阅消息", "MQTT over TLS")
+Rel(iot_security_system, device, "设备管理\n证书下发\n固件更新", "MQTT/HTTPS")
+
+SHOW_LEGEND()
+
+@enduml
+

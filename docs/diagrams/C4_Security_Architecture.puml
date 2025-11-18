@@ -1,0 +1,74 @@
+@startuml C4_Security_Architecture
+!include ../../C4-PlantUML/C4.puml
+!include ../../C4-PlantUML/C4_Context.puml
+!include ../../C4-PlantUML/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+LAYOUT_LANDSCAPE()
+
+title Security Architecture Diagram - IoT Security Management System
+
+Person(user, "管理员", "管理IoT设备和安全策略")
+System_Ext(device, "IoT设备", "ESP8266等IoT设备")
+
+System_Boundary(security_layers, "安全分层架构") {
+    Boundary(zero_trust_layer, "零信任策略层") {
+        Container(identity_mgmt, "身份管理", "JWT, OAuth2", "统一身份认证和授权")
+        Container(authorization, "动态授权", "RBAC, ABAC", "基于角色的访问控制")
+        Container(trust_scoring, "信任评分", "Python Service", "设备信任度评估")
+    }
+    
+    Boundary(app_security_layer, "应用安全层") {
+        Container(jwt_auth, "JWT认证", "FastAPI, Python", "JWT token验证")
+        Container(encryption, "数据加密", "SM2/SM4, Python", "端到端加密")
+        Container(api_gateway, "API网关", "FastAPI Middleware", "请求验证和路由")
+    }
+    
+    Boundary(transport_layer, "传输安全层") {
+        Container(tls, "TLS 1.3", "OpenSSL", "传输层加密")
+        Container(sm_ssl, "国密SSL", "GMSSL", "国密算法支持")
+        Container(cert_mgmt, "证书管理", "X.509, Python", "证书生成和验证")
+    }
+    
+    Boundary(access_layer, "接入安全层") {
+        Container(device_auth, "设备认证", "X.509, MQTT", "一机一密设备认证")
+        Container(ip_whitelist, "IP白名单", "Nginx, Firewall", "IP访问控制")
+        Container(replay_protection, "防重放", "Nonce, Timestamp", "防止重放攻击")
+    }
+    
+    Boundary(infra_layer, "基础设施层") {
+        Container(vlan, "VLAN隔离", "Network", "网络隔离")
+        Container(kms, "密钥管理", "KMS, Vault", "密钥存储和管理")
+        Container(container, "容器化", "Docker", "容器化部署")
+        Container(monitoring, "安全监控", "Prometheus, Grafana", "安全事件监控")
+    }
+}
+
+System_Ext(mqtt_broker, "MQTT Broker", "EMQX/Mosquitto")
+ContainerDb(database, "数据库", "PostgreSQL", "存储安全配置和日志")
+ContainerDb(cache, "缓存", "Redis", "会话和令牌存储")
+
+Rel(user, identity_mgmt, "认证", "HTTPS")
+Rel(user, authorization, "授权", "HTTPS")
+Rel(identity_mgmt, jwt_auth, "JWT生成")
+Rel(jwt_auth, api_gateway, "Token验证")
+Rel(api_gateway, encryption, "数据加密")
+Rel(device, device_auth, "设备认证", "MQTT over TLS")
+Rel(device_auth, cert_mgmt, "证书验证")
+Rel(cert_mgmt, tls, "证书配置")
+Rel(cert_mgmt, sm_ssl, "国密证书")
+Rel(device, tls, "TLS连接", "MQTT over TLS")
+Rel(device, sm_ssl, "国密SSL", "MQTT over TLS")
+Rel(tls, mqtt_broker, "加密传输", "MQTT over TLS")
+Rel(sm_ssl, mqtt_broker, "国密传输", "MQTT over TLS")
+Rel(device_auth, ip_whitelist, "IP验证")
+Rel(device_auth, replay_protection, "防重放验证")
+Rel(trust_scoring, database, "存储评分")
+Rel(identity_mgmt, cache, "会话存储")
+Rel(cert_mgmt, kms, "密钥管理")
+Rel(monitoring, database, "存储日志")
+
+SHOW_LEGEND()
+
+@enduml
+

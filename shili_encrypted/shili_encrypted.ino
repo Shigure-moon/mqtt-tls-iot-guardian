@@ -2,8 +2,7 @@
  * IoT安全管理系统 - ESP8266设备端（带屏幕显示）
  * 
  * 设备ID: esp8266
- * 设备名称: esp8266
- * 
+ * 设备名称: esp8266 
  * 功能：
  * - WiFi连接
  * - MQTT over TLS安全通信
@@ -56,7 +55,7 @@
  const char* password = "993056494a.";    // WiFi密码
  
  // MQTT Broker配置
- const char* mqtt_server = "10.42.0.1";   // MQTT服务器地址
+ const char* mqtt_server = "192.168.1.8";   // MQTT服务器地址
  const int mqtt_port = 8883;                  // TLS端口
  const char* mqtt_user = "admin";   // MQTT用户名
  const char* mqtt_pass = "admin";   // MQTT密码
@@ -64,32 +63,32 @@
  // 使用TLS
  #define USE_TLS true                         // 启用TLS
  
- // CA证书（用于验证MQTT服务器证书）
- static const char ca_cert[] PROGMEM = R"PEM(
- -----BEGIN CERTIFICATE-----
- MIIDjjCCAnagAwIBAgIUQ7JiWpxdHTbLU6gCSnC6KpY61HgwDQYJKoZIhvcNAQEL
- BQAwYjELMAkGA1UEBhMCQ04xEDAOBgNVBAgMB0JlaWppbmcxEDAOBgNVBAcMB0Jl
- aWppbmcxHjAcBgNVBAoMFUlvVCBTZWN1cml0eSBQbGF0Zm9ybTEPMA0GA1UEAwwG
- SW9UIENBMB4XDTI1MTEwMzA1NTcyMloXDTM1MTEwMTA1NTcyMlowYjELMAkGA1UE
- BhMCQ04xEDAOBgNVBAgMB0JlaWppbmcxEDAOBgNVBAcMB0JlaWppbmcxHjAcBgNV
- BAoMFUlvVCBTZWN1cml0eSBQbGF0Zm9ybTEPMA0GA1UEAwwGSW9UIENBMIIBIjAN
- BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3eLGZaSnN7+rcMILy8AS7jMDnAnm
- pMXENqmFUkA7bIN+IGuwLdRTj9Zaw+l3EPSQG6U4WTwnVItwOk/DpezjHUJ48qdx
- M2Mh/+UGFoRdQOUbswM+7Xrpc6sMMD9MhX+cOF2F9aszvaS9e/M1YY9ZYMbcur9x
- 1uJfsFdEPKiMvHF9R/Cu5NGlHj1rg4jCTpLixtgB/4vtwD25I3P5NKeVhtYc8Xl7
- JiFwJ5XXQjvtSSBR6RsiOa7qpEhmyk3bEec/hxUQ+rBJ+MvAAPyTCwozhQN1l6Yy
- aOCr5Tug8uB9fD+lFd0+msosKTRQNcWOUrbsFcj1T+FlDPpoT0mNBHoHWwIDAQAB
- ozwwOjAXBgNVHREEEDAOggxpb3QtY2EubG9jYWwwDwYDVR0TAQH/BAUwAwEB/zAO
- BgNVHQ8BAf8EBAMCAYYwDQYJKoZIhvcNAQELBQADggEBAIrV1LCG9zbckevrzIU3
- 6tfD+fpbMfPeptuV06FUv7X+gsobaySKaheQk5QOK9cpDbtxkJLfGk8SWKHhDU+H
- K+GE1o7dY3YU0WOP2t0qN7kjG7DaqROH1KnsraHYMoSnBSnJ6EvFD+6zD5Mdb9Ax
- 619Tj3snjU24Of6dYVUwxGVGGpvUQkghiBovSIB2iSbUq/fwfd2wBWOo7EM7shpV
- 5mGpOsi/SqXxLmlw43ROJgJYYe8wqguLClvhrad96dDFd+L22BaHtdaxW5NcZfXe
- P2QhrIz/oPuwDwPG37nluuVxb9RRP85XAGbUIkD99FKSCtnY6DbtkMrr0fhicsz5
- ipY=
- -----END CERTIFICATE-----
- 
- )PEM";
+// CA证书（用于验证MQTT服务器证书）
+static const char ca_cert[] PROGMEM = R"PEM(
+-----BEGIN CERTIFICATE-----
+MIIDjjCCAnagAwIBAgIUQ7JiWpxdHTbLU6gCSnC6KpY61HgwDQYJKoZIhvcNAQEL
+BQAwYjELMAkGA1UEBhMCQ04xEDAOBgNVBAgMB0JlaWppbmcxEDAOBgNVBAcMB0Jl
+aWppbmcxHjAcBgNVBAoMFUlvVCBTZWN1cml0eSBQbGF0Zm9ybTEPMA0GA1UEAwwG
+SW9UIENBMB4XDTI1MTEwMzA1NTcyMloXDTM1MTEwMTA1NTcyMlowYjELMAkGA1UE
+BhMCQ04xEDAOBgNVBAgMB0JlaWppbmcxEDAOBgNVBAcMB0JlaWppbmcxHjAcBgNV
+BAoMFUlvVCBTZWN1cml0eSBQbGF0Zm9ybTEPMA0GA1UEAwwGSW9UIENBMIIBIjAN
+BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3eLGZaSnN7+rcMILy8AS7jMDnAnm
+pMXENqmFUkA7bIN+IGuwLdRTj9Zaw+l3EPSQG6U4WTwnVItwOk/DpezjHUJ48qdx
+M2Mh/+UGFoRdQOUbswM+7Xrpc6sMMD9MhX+cOF2F9aszvaS9e/M1YY9ZYMbcur9x
+1uJfsFdEPKiMvHF9R/Cu5NGlHj1rg4jCTpLixtgB/4vtwD25I3P5NKeVhtYc8Xl7
+JiFwJ5XXQjvtSSBR6RsiOa7qpEhmyk3bEec/hxUQ+rBJ+MvAAPyTCwozhQN1l6Yy
+aOCr5Tug8uB9fD+lFd0+msosKTRQNcWOUrbsFcj1T+FlDPpoT0mNBHoHWwIDAQAB
+ozwwOjAXBgNVHREEEDAOggxpb3QtY2EubG9jYWwwDwYDVR0TAQH/BAUwAwEB/zAO
+BgNVHQ8BAf8EBAMCAYYwDQYJKoZIhvcNAQELBQADggEBAIrV1LCG9zbckevrzIU3
+6tfD+fpbMfPeptuV06FUv7X+gsobaySKaheQk5QOK9cpDbtxkJLfGk8SWKHhDU+H
+K+GE1o7dY3YU0WOP2t0qN7kjG7DaqROH1KnsraHYMoSnBSnJ6EvFD+6zD5Mdb9Ax
+619Tj3snjU24Of6dYVUwxGVGGpvUQkghiBovSIB2iSbUq/fwfd2wBWOo7EM7shpV
+5mGpOsi/SqXxLmlw43ROJgJYYe8wqguLClvhrad96dDFd+L22BaHtdaxW5NcZfXe
+P2QhrIz/oPuwDwPG37nluuVxb9RRP85XAGbUIkD99FKSCtnY6DbtkMrr0fhicsz5
+ipY=
+-----END CERTIFICATE-----
+
+)PEM";
  
  // MQTT主题
  const char* topic_status = "devices/" DEVICE_ID "/status";
